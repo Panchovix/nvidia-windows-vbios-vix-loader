@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nvidia-windows-vbios-vix-loader"
+version = "0.1.0"
+description = "Load a modified VBIOS on Windows through the NVIDIA driver's registry override, without flashing"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Environment :: Win32 (MS Windows)",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Hardware",
+]
+
+[project.scripts]
+vbios-loader = "nvidia_vbios.windows_loader.cli:main"
+
+[project.gui-scripts]
+vbios-loader-gui = "nvidia_vbios.windows_loader.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

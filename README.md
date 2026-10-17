@@ -66,18 +66,18 @@ If you try it, please open an issue with the GPU, driver version and result.
 ## Which file to load
 
 The file must contain exactly one VBIOS for this GPU's PCI ID with a valid checksum. Full flash dumps with
-two banks are refused: export a single-chain payload with Vix Editor's command-line tool (`nvbios`).
+two banks are refused: export a single-chain payload with Vix Editor's command-line tool (`nvbios.exe`).
 
 With Vix Editor 0.1.11 or newer, saving an edited Ada or Ampere copy also saves `<name>-loader.bin` next to
 it: load that file. The commands below do the same from the command line.
 
 - **Blackwell**: the ROM saved by Vix Editor after editing, or any edited single-bank dump (for example from
-  GPU-Z). If it is refused because of two banks, run `nvbios normalize edited.rom payload.bin`.
+  GPU-Z). If it is refused because of two banks, run `.\nvbios.exe normalize edited.rom payload.bin`.
 - **Ada**: the GSP firmware loads at most 512 KiB counted from the legacy image, so the payload must be
-  relocated: `nvbios normalize edited.rom payload.bin --representation ada-relocated-v2` (for the
-  RTX 2000 Ada, `ada-relocated-v1` also works). Larger payloads are refused.
+  relocated: `.\nvbios.exe normalize edited.rom payload.bin --representation ada-relocated-v2`. Larger
+  payloads are refused.
 - **Ampere GA102–GA107**: the same 512 KiB limit. Use
-  `nvbios normalize edited.rom payload.bin --representation ampere-relocated-v1`.
+  `.\nvbios.exe normalize edited.rom payload.bin --representation ampere-relocated-v1`.
 
 ## Usage
 
@@ -122,8 +122,9 @@ in its folder.
   With a single NVIDIA GPU the selection can be omitted.
 - `--no-restart` writes the values without restarting the GPU; they apply at the next restart.
 - `--json` prints machine-readable output.
-- Exit codes: `0` done, `1` refused or failed (nothing written unless the message says so), `3` values written
-  but the GPU restart failed (restart Windows).
+- Exit codes: `0` done, `1` refused or failed (nothing written unless the message says so), `2` invalid
+  command-line arguments (nothing written), `3` values written but the GPU restart failed (restart Windows),
+  `70` unexpected internal error, `130` interrupted (Ctrl+C).
 
 The override stays in the GPU's registry key until you remove it, so it applies again at every Windows
 start. A clean driver installation or a driver update can recreate the driver key and drop the override. Run

@@ -15,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from license_texts import copy_nuitka_licenses, copy_nuitka_onefile_licenses  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
+# python-incorporated.txt holds the notices of code built into this CPython version (python312.dll).
+INCORPORATED_PYTHON = '3.12.10'
 TCL_TK_TERMS = re.compile(r'This software is copyrighted by the Regents of the University of\s+California.*?'
                           r'terms specified in\s+this\s+license\.', re.S)
 
@@ -44,7 +46,11 @@ def main(argv):
     third_party.mkdir(parents=True)
     terms = copy_nuitka_licenses(third_party)
     copy_nuitka_onefile_licenses(third_party)
+    if platform.python_version() != INCORPORATED_PYTHON:
+        raise SystemExit(f'python-incorporated.txt is for CPython {INCORPORATED_PYTHON}; update it for '
+                         f'{platform.python_version()} (Doc/license.rst and Modules/_hacl of that version)')
     shutil.copyfile(Path(sys.base_prefix) / 'LICENSE.txt', third_party / 'python.LICENSE.txt')
+    shutil.copyfile(Path(__file__).resolve().parent / 'python-incorporated.txt', third_party / 'python-incorporated.txt')
     (third_party / 'tcl-tk.LICENSE.txt').write_text(tcl_tk_license(), encoding='utf-8')
     shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
     source = (ROOT / 'THIRD_PARTY_NOTICES.md').read_text(encoding='utf-8')
@@ -53,8 +59,10 @@ def main(argv):
         '# Third-party notices\n\n'
         '## Windows program\n\n'
         f'vbios-loader.exe and vbios-loader-gui.exe contain the CPython {platform.python_version()} runtime and '
-        'standard library (Python Software Foundation License, `third_party/python.LICENSE.txt`; that file also '
-        'covers the libraries and Microsoft C runtime files distributed with the Windows build of CPython). '
+        'standard library (Python Software Foundation License, `third_party/python.LICENSE.txt`, which also '
+        'covers the libraries and Microsoft C runtime files distributed with the Windows build of CPython; the '
+        'licenses of software incorporated in CPython, such as the Mersenne Twister, dtoa, SipHash and HACL*, '
+        'are in `third_party/python-incorporated.txt`). '
         f'They are compiled with Nuitka; the Nuitka runtime compiled into them is licensed under {terms} '
         '(`third_party/nuitka.*`), and their single-file bootstrap includes Zstandard '
         '(BSD, `third_party/nuitka-inline-zstd.LICENSE`). '

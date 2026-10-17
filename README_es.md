@@ -68,7 +68,7 @@ Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 
 El archivo debe tener exactamente una VBIOS para el ID PCI de esta GPU, con checksum válido. Los volcados
 completos de la flash con dos bancos se rechazan: exporta un payload de una sola cadena con la herramienta
-de línea de comandos de Vix Editor (`nvbios`).
+de línea de comandos de Vix Editor (`nvbios.exe`).
 
 Desde Vix Editor 0.1.11, al guardar una copia editada de Ada o Ampere también se guarda
 `<nombre>-loader.bin` al lado: carga ese archivo. Los comandos de abajo hacen lo mismo desde la línea de
@@ -76,12 +76,12 @@ comandos.
 
 - **Blackwell**: la ROM que guarda Vix Editor después de editar, o cualquier volcado editado de un solo
   banco (por ejemplo, de GPU-Z). Si se rechaza por tener dos bancos, usa
-  `nvbios normalize editada.rom payload.bin`.
+  `.\nvbios.exe normalize editada.rom payload.bin`.
 - **Ada**: el firmware GSP carga como máximo 512 KiB contados desde la imagen legacy, así que hay que
-  reubicar el payload: `nvbios normalize editada.rom payload.bin --representation ada-relocated-v2` (en la
-  RTX 2000 Ada también sirve `ada-relocated-v1`). Los payloads más grandes se rechazan.
+  reubicar el payload: `.\nvbios.exe normalize editada.rom payload.bin --representation ada-relocated-v2`.
+  Los payloads más grandes se rechazan.
 - **Ampere GA102–GA107**: el mismo límite de 512 KiB. Usa
-  `nvbios normalize editada.rom payload.bin --representation ampere-relocated-v1`.
+  `.\nvbios.exe normalize editada.rom payload.bin --representation ampere-relocated-v1`.
 
 ## Uso
 
@@ -128,7 +128,8 @@ esa carpeta.
 - `--no-restart` escribe los valores sin reiniciar la GPU; se aplican en el siguiente reinicio.
 - `--json` entrega la salida en formato para máquinas.
 - Códigos de salida: `0` listo, `1` rechazado o fallido (no se escribió nada salvo que el mensaje diga lo
-  contrario), `3` valores escritos pero falló el reinicio de la GPU (reinicia Windows).
+  contrario), `2` argumentos de línea de comandos no válidos (no se escribió nada), `3` valores escritos pero
+  falló el reinicio de la GPU (reinicia Windows), `70` error interno inesperado, `130` interrumpido (Ctrl+C).
 
 El reemplazo queda en la clave de registro de la GPU hasta que lo quites, así que se vuelve a aplicar en
 cada inicio de Windows. Una instalación limpia o una actualización del driver puede volver a crear la clave

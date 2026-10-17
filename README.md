@@ -49,9 +49,9 @@ returns the key to its state before the first `load`, except that an override wr
 
 | GPU family | State |
 | --- | --- |
-| Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Uses the same registry values that mVolt+ uses to load BIOS files on Blackwell. **This tool has not been tested on hardware yet.** |
-| Ada AD10x (GeForce RTX 40, RTX Ada) | **Untested**: it is not known whether the Windows driver uses the override on Ada. |
-| Ampere GA102–GA107 (GeForce RTX 30, RTX A series) | **Untested**: same as Ada. GA100 (A100, A30, A800) is not supported. |
+| Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Uses the same registry values that mVolt+ uses to load BIOS files on Blackwell. Tested on an RTX 5070 (driver 617.42): an edited VBIOS loaded and worked after a GPU restart, without restarting Windows. |
+| Ada AD10x (GeForce RTX 40, RTX Ada) | Tested on an RTX 4090 (VBIOS 95.02.18, driver 617.42) with an `ada-relocated-v2` payload: a raised power limit (671 W) and core clock offset range (+1200 MHz) applied. Other Ada GPUs are untested. |
+| Ampere GA102–GA107 (GeForce RTX 30, RTX A series) | Tested on an RTX A2000 (driver 617.42) with an `ampere-relocated-v1` payload: a lowered power floor (5 W) applied. Other Ampere GPUs are untested. GA100 (A100, A30, A800) is not supported. |
 
 If you try it, please open an issue with the GPU, driver version and result.
 
@@ -67,6 +67,9 @@ If you try it, please open an issue with the GPU, driver version and result.
 
 The file must contain exactly one VBIOS for this GPU's PCI ID with a valid checksum. Full flash dumps with
 two banks are refused: export a single-chain payload with Vix Editor's command-line tool (`nvbios`).
+
+With Vix Editor 0.1.11 or newer, saving an edited Ada or Ampere copy also saves `<name>-loader.bin` next to
+it: load that file. The commands below do the same from the command line.
 
 - **Blackwell**: the ROM saved by Vix Editor after editing, or any edited single-bank dump (for example from
   GPU-Z). If it is refused because of two banks, run `nvbios normalize edited.rom payload.bin`.
@@ -93,7 +96,7 @@ two banks are refused: export a single-chain payload with Vix Editor's command-l
    `unload`).
 
 Every result and warning is also written in the **Messages** area. The window is in Spanish when Windows
-is; `vbios-loader-gui.exe --lang en` or `--lang es` chooses the language.
+is; the **Language** menu, or `vbios-loader-gui.exe --lang en` / `--lang es`, changes it.
 
 ### Command line
 
@@ -121,7 +124,8 @@ in its folder.
 - Exit codes: `0` done, `1` refused or failed (nothing written unless the message says so), `3` values written
   but the GPU restart failed (restart Windows).
 
-A clean driver installation or a driver update can recreate the driver key and drop the override. Run
+The override stays in the GPU's registry key until you remove it, so it applies again at every Windows
+start. A clean driver installation or a driver update can recreate the driver key and drop the override. Run
 `status` after updating and `load` again if needed.
 
 From source, with Python 3.11 or newer: `pip install .` then `vbios-loader status` or `vbios-loader-gui`, or

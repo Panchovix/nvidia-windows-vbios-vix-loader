@@ -1,7 +1,8 @@
 """vbios-loader-gui: a window to pick a GPU and a VBIOS file, then load or remove the override.
 
 Widgets only; the state, checks and texts are in controller.py, the registry work in operations.py.
-VBIOS_LOADER_GUI_SMOKE=1 opens the window, reads the status, and closes it after a few seconds.
+VBIOS_LOADER_GUI_SMOKE=1 opens the window, reads the status, switches to the other language and closes it
+after a few seconds.
 """
 from __future__ import annotations
 import argparse
@@ -17,7 +18,7 @@ from tkinter.scrolledtext import ScrolledText
 
 from . import __version__
 from .cli import windows_platform
-from .controller import Controller, system_language
+from .controller import LANGUAGES, Controller, system_language
 from .operations import LoaderError
 
 PROG = 'vbios-loader-gui'
@@ -29,11 +30,9 @@ COLUMNS = (('col_index', 40), ('col_name', 230), ('col_pci', 90), ('col_location
 
 class Window:
     def __init__(self, root, controller):
-        self.root, self.c, self.t = root, controller, controller.text
+        self.root, self.c = root, controller
         self.results = queue.Queue()
         self.failed = False
-        t = self.t
-        root.title(f"{t['title']} {__version__}")
         root.minsize(780, 540)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(1, weight=1)
@@ -41,6 +40,21 @@ class Window:
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.report_callback_exception = self.callback_error
         ttk.Style(root).configure('Treeview', rowheight=font.nametofont('TkDefaultFont').metrics('linespace') + 6)
+        self.language = tk.StringVar(value=controller.language)
+        self.build()
+
+    def build(self):
+        """Create the widgets in the controller's language (again after a language change)."""
+        root, controller = self.root, self.c
+        self.t = t = controller.text
+        root.title(f"{t['title']} {__version__}")
+        menubar = tk.Menu(root)
+        languages = tk.Menu(menubar, tearoff=False)
+        for code, name in LANGUAGES:
+            languages.add_radiobutton(label=name, value=code, variable=self.language,
+                                      command=lambda code=code: self.set_language(code))
+        menubar.add_cascade(label=t['language'], menu=languages)
+        root.configure(menu=menubar)
 
         self.banner = tk.Label(root, text=t['not_admin'], bg='#fde2e1', fg='#7a1010', anchor='w', justify='left',
                                padx=10, pady=6, wraplength=740)
@@ -110,12 +124,28 @@ class Window:
 
     def refresh(self):
         self.log(self.c.refresh())
+        self.fill()
+
+    def fill(self):
         self.tree.delete(*self.tree.get_children())
         for row in self.c.rows():
             self.tree.insert('', 'end', iid=str(row[0]), values=row)
         if self.c.gpu is not None:
             self.tree.selection_set(str(self.c.gpu['index']))
         self.update_controls()
+
+    def set_language(self, language):
+        if self.c.busy:                  # the running action finishes in the current language
+            self.language.set(self.c.language)
+            return
+        self.c.set_language(language)
+        messages = self.log_text.get('1.0', 'end-1c')
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.build()
+        if messages:
+            self.log([messages])
+        self.fill()
 
     def update_controls(self):
         c = self.c
@@ -210,6 +240,9 @@ def main(argv=None, platform=None):
     window.refresh()
     if smoke:
         root.attributes('-topmost', True)
+        # The window is rebuilt once in the other language, so the CI screenshot shows the switch.
+        other = next(code for code, _ in LANGUAGES if code != window.c.language)
+        root.after(3000, lambda: window.set_language(other))
         root.after(SMOKE_SECONDS * 1000, root.destroy)
     root.mainloop()
     return 1 if smoke and window.failed else 0

@@ -7,7 +7,7 @@ import ctypes
 from ctypes import wintypes
 import os
 import subprocess
-from .devices import REG_BINARY, REG_DWORD, REG_SZ, Adapter, parse_instance_id, parse_location
+from .devices import REG_BINARY, REG_DWORD, REG_SZ, Adapter, parse_instance_id, parse_location, pci_location
 
 DIGCF_PRESENT = 0x2
 DICS_FLAG_GLOBAL = 0x1
@@ -17,6 +17,8 @@ KEY_SET_VALUE = 0x0002
 SPDRP_DEVICEDESC = 0x00
 SPDRP_DRIVER = 0x09
 SPDRP_LOCATIONINFORMATION = 0x0D
+SPDRP_BUSNUMBER = 0x15
+SPDRP_ADDRESS = 0x1C
 ERROR_FILE_NOT_FOUND = 2
 ERROR_MORE_DATA = 234
 ERROR_NO_MORE_ITEMS = 259
@@ -148,6 +150,19 @@ class Win32Platform:
             return None
         return buffer.value or None
 
+    def _dword_property(self, info, data, prop):
+        value = wintypes.DWORD()
+        if not self.setupapi.SetupDiGetDeviceRegistryPropertyW(info, ctypes.byref(data), prop, None, ctypes.byref(value),
+                                                               ctypes.sizeof(value), None):
+            return None
+        return value.value
+
+    def _location(self, info, data):
+        # The location text is translated ('Bus PCI 1, dispositivo 0, función 0'); the numbers are not.
+        return (pci_location(self._dword_property(info, data, SPDRP_BUSNUMBER),
+                             self._dword_property(info, data, SPDRP_ADDRESS))
+                or parse_location(self._property(info, data, SPDRP_LOCATIONINFORMATION)))
+
     def _open(self, info, data, write):
         access = KEY_READ | (KEY_SET_VALUE if write else 0)
         handle = self.setupapi.SetupDiOpenDevRegKey(info, ctypes.byref(data), DICS_FLAG_GLOBAL, 0, DIREG_DRV, access)
@@ -174,7 +189,7 @@ class Win32Platform:
                     key.close()
             found.append(dict(name=name or 'NVIDIA display adapter', vendor=vendor, device=device,
                               subsystem=subsystem, instance_id=instance_id, driver_version=version,
-                              location=parse_location(self._property(info, data, SPDRP_LOCATIONINFORMATION)),
+                              location=self._location(info, data),
                               driver_key=self._property(info, data, SPDRP_DRIVER)))
         found.sort(key=lambda a: (a['location'] is None, a['location'] or '', a['instance_id']))
         return [Adapter(index=i, **fields) for i, fields in enumerate(found)]

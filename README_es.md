@@ -50,9 +50,9 @@ y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
 
 | Familia | Estado |
 | --- | --- |
-| Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Usa los mismos valores de registro con los que mVolt+ carga archivos de BIOS en Blackwell. **Esta herramienta todavía no se ha probado en hardware.** |
-| Ada AD10x (GeForce RTX 40, RTX Ada) | **Sin probar**: no se sabe si el driver de Windows usa la VBIOS de reemplazo en Ada. |
-| Ampere GA102–GA107 (GeForce RTX 30, serie RTX A) | **Sin probar**: igual que Ada. GA100 (A100, A30, A800) no está soportada. |
+| Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Usa los mismos valores de registro con los que mVolt+ carga archivos de BIOS en Blackwell. Probado en una RTX 5070 (driver 617.42): una VBIOS editada se cargó y funcionó al reiniciar la GPU, sin reiniciar Windows. |
+| Ada AD10x (GeForce RTX 40, RTX Ada) | Probado en una RTX 4090 (VBIOS 95.02.18, driver 617.42) con un payload `ada-relocated-v2`: se aplicaron un límite de potencia mayor (671 W) y un rango de offset de reloj del núcleo mayor (+1200 MHz). Las demás GPUs Ada están sin probar. |
+| Ampere GA102–GA107 (GeForce RTX 30, serie RTX A) | Probado en una RTX A2000 (driver 617.42) con un payload `ampere-relocated-v1`: se aplicó un mínimo de potencia menor (5 W). Las demás GPUs Ampere están sin probar. GA100 (A100, A30, A800) no está soportada. |
 
 Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 
@@ -69,6 +69,10 @@ Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 El archivo debe tener exactamente una VBIOS para el ID PCI de esta GPU, con checksum válido. Los volcados
 completos de la flash con dos bancos se rechazan: exporta un payload de una sola cadena con la herramienta
 de línea de comandos de Vix Editor (`nvbios`).
+
+Desde Vix Editor 0.1.11, al guardar una copia editada de Ada o Ampere también se guarda
+`<nombre>-loader.bin` al lado: carga ese archivo. Los comandos de abajo hacen lo mismo desde la línea de
+comandos.
 
 - **Blackwell**: la ROM que guarda Vix Editor después de editar, o cualquier volcado editado de un solo
   banco (por ejemplo, de GPU-Z). Si se rechaza por tener dos bancos, usa
@@ -96,7 +100,7 @@ de línea de comandos de Vix Editor (`nvbios`).
    que `unload`).
 
 Cada resultado y advertencia queda también en el área de **Mensajes**. La ventana sale en español si
-Windows está en español; `vbios-loader-gui.exe --lang es` o `--lang en` elige el idioma.
+Windows está en español; el menú **Idioma**, o `vbios-loader-gui.exe --lang es` / `--lang en`, lo cambia.
 
 ### Línea de comandos
 
@@ -124,8 +128,10 @@ esa carpeta.
 - Códigos de salida: `0` listo, `1` rechazado o fallido (no se escribió nada salvo que el mensaje diga lo
   contrario), `3` valores escritos pero falló el reinicio de la GPU (reinicia Windows).
 
-Una instalación limpia o una actualización del driver puede volver a crear la clave del driver y perder el
-reemplazo. Después de actualizar, revisa `status` y vuelve a hacer `load` si hace falta.
+El reemplazo queda en la clave de registro de la GPU hasta que lo quites, así que se vuelve a aplicar en
+cada inicio de Windows. Una instalación limpia o una actualización del driver puede volver a crear la clave
+del driver y perder el reemplazo. Después de actualizar, revisa `status` y vuelve a hacer `load` si hace
+falta.
 
 Desde el código fuente, con Python 3.11 o más nuevo: `pip install .` y luego `vbios-loader status` o
 `vbios-loader-gui`, o `python -m nvidia_vbios.windows_loader status` /

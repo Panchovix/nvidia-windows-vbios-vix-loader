@@ -72,6 +72,7 @@ STRINGS = {
         'hint_remove': 'In this window: click Refresh, then Remove override, before restarting Windows.',
         'hint_remove_first': 'In this window: use Remove override first.',
         'hint_refresh': 'In this window: click Refresh and select the GPU again.',
+        'language': 'Language',
     },
     'es': {
         'title': 'Windows VBIOS Vix Loader',
@@ -134,6 +135,7 @@ STRINGS = {
         'hint_remove': 'En esta ventana: pulsa Actualizar y luego Quitar reemplazo antes de reiniciar Windows.',
         'hint_remove_first': 'En esta ventana: usa primero Quitar reemplazo.',
         'hint_refresh': 'En esta ventana: pulsa Actualizar y vuelve a elegir la GPU.',
+        'language': 'Idioma',
     },
 }
 
@@ -153,9 +155,13 @@ def system_language():
     return language_for(ctypes.windll.kernel32.GetUserDefaultUILanguage())
 
 
+# Each language is named in itself in the Language menu.
+LANGUAGES = (('en', 'English'), ('es', 'Español'))
+
+
 class Controller:
     def __init__(self, platform, language='en'):
-        self.platform, self.text = platform, STRINGS[language]
+        self.platform, self.language, self.text = platform, language, STRINGS[language]
         self.gpus, self.admin = [], False
         self.selected = None          # instance id of the selected GPU
         self.path = self.data = None
@@ -178,6 +184,16 @@ class Controller:
             self.selected = self.gpus[0]['instance_id']
         self.validate()
         return lines
+
+    def set_language(self, language):
+        """Switch the texts; the file is checked again so its refusal reads in the new language."""
+        if self.busy or language == self.language:
+            return
+        self.language, self.text = language, STRINGS[language]
+        if self.path is not None:
+            self.choose_file(self.path)
+        else:
+            self.validate()
 
     @property
     def gpu(self):

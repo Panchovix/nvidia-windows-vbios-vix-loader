@@ -252,6 +252,23 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(c.validation_text(), (False, 'Elige un archivo VBIOS.'))
         self.assertEqual((language_for(0x0C0A), language_for(0x080A), language_for(0x0409)), ('es', 'es', 'en'))
 
+    def test_language_switch_rewrites_texts_and_the_refusal(self):
+        fake, _ = platform()
+        c = self.controller(fake, 'es')
+        c.choose_file(self.file(b'\x00' * 0x400))
+        ok, text = c.validation_text()
+        self.assertFalse(ok)
+        self.assertTrue(text.startswith('Rechazado: '))
+        c.set_language('en')
+        self.assertEqual((c.language, c.rows()[0][5]), ('en', 'none'))
+        self.assertTrue(c.validation_text()[1].startswith('Refused: '))
+        c.choose_file(str(self.directory / 'missing.rom'))
+        c.set_language('es')
+        self.assertTrue(c.validation_text()[1].startswith('Rechazado: No se puede leer '))
+        c.busy = True                     # not while a load or unload runs
+        c.set_language('en')
+        self.assertEqual(c.language, 'es')
+
     @unittest.skipIf(os.name == 'nt', 'checks the behaviour on other systems')
     def test_controller_needs_no_tk_and_the_window_fails_cleanly_off_windows(self):
         code = ('import sys; from nvidia_vbios.windows_loader import controller; '

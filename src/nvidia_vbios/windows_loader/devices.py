@@ -43,8 +43,21 @@ def parse_instance_id(instance_id: str):
     return int(vendor, 16), int(device, 16), int(subsystem, 16) if subsystem else None
 
 
+def pci_location(bus: int | None, address: int | None):
+    """SPDRP_BUSNUMBER and SPDRP_ADDRESS (device << 16 | function) -> '01:00.0'; None when missing or invalid.
+
+    Unlike the location text, these numbers do not depend on the Windows display language.
+    """
+    if bus is None or address is None:
+        return None
+    device, function = address >> 16, address & 0xFFFF
+    if not (0 <= bus <= 0xFF and device < 32 and function < 8):
+        return None
+    return f'{bus:02x}:{device:02x}.{function:x}'
+
+
 def parse_location(text: str | None):
-    """'PCI bus 1, device 0, function 0' -> '01:00.0'; None when the text is not a PCI location."""
+    """'PCI bus 1, device 0, function 0' -> '01:00.0'; None when the text is not an English PCI location."""
     match = re.search(r'PCI bus (\d+), device (\d+), function (\d+)', text or '', re.I)
     if not match:
         return None

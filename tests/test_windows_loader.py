@@ -15,7 +15,7 @@ import unittest
 from nvidia_vbios.payload import GA10X_MAX_SIZE, PayloadError
 from nvidia_vbios.windows_loader import cli, operations as ops
 from nvidia_vbios.windows_loader.devices import (REG_BINARY, REG_DWORD, REG_SZ, Adapter, normalize_location,
-                                                 nvidia_version, parse_instance_id, parse_location)
+                                                 nvidia_version, parse_instance_id, parse_location, pci_location)
 from nvidia_vbios.windows_loader.image import extract_chain
 
 RTX_5070, RTX_5070_TI, RTX_4090, RTX_A2000, A100 = 0x2C09, 0x2C05, 0x2684, 0x2531, 0x20B5
@@ -319,6 +319,11 @@ class SelectionTests(unittest.TestCase):
         self.assertIsNone(parse_instance_id(r'ROOT\BasicDisplay\0000'))
         self.assertEqual(parse_location('PCI bus 10, device 0, function 1'), '0a:00.1')
         self.assertIsNone(parse_location(None))
+        self.assertIsNone(parse_location('Bus PCI 12, dispositivo 0, función 0'))     # translated text
+        self.assertEqual(pci_location(12, 0), '0c:00.0')                              # SPDRP_BUSNUMBER/ADDRESS
+        self.assertEqual(pci_location(0x41, 0x1F0007), '41:1f.7')
+        for bus, address in ((None, 0), (1, None), (256, 0), (1, 0x200000), (1, 8)):
+            self.assertIsNone(pci_location(bus, address))
         self.assertEqual(normalize_location('0A:1f.7'), '0a:1f.7')
 
 

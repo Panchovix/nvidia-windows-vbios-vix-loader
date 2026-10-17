@@ -100,7 +100,9 @@ comandos.
    que `unload`).
 
 Cada resultado y advertencia queda también en el área de **Mensajes**. La ventana sale en español si
-Windows está en español; el menú **Idioma**, o `vbios-loader-gui.exe --lang es` / `--lang en`, lo cambia.
+Windows está en español; el menú **Idioma**, o `vbios-loader-gui.exe --lang es` / `--lang en`, lo cambia. Sale
+oscura si Windows usa el modo oscuro para las aplicaciones; el menú **Tema**, o `--theme light` / `--theme dark`,
+lo cambia.
 
 ### Línea de comandos
 

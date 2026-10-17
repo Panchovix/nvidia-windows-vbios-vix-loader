@@ -96,7 +96,8 @@ it: load that file. The commands below do the same from the command line.
    `unload`).
 
 Every result and warning is also written in the **Messages** area. The window is in Spanish when Windows
-is; the **Language** menu, or `vbios-loader-gui.exe --lang en` / `--lang es`, changes it.
+is; the **Language** menu, or `vbios-loader-gui.exe --lang en` / `--lang es`, changes it. It is dark when
+Windows uses the dark app mode; the **Theme** menu, or `--theme light` / `--theme dark`, changes it.
 
 ### Command line
 

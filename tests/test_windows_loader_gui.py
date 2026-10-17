@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 from nvidia_vbios.windows_loader import controller as gui_controller, operations as ops
-from nvidia_vbios.windows_loader.controller import STRINGS, Controller, language_for
+from nvidia_vbios.windows_loader.controller import STRINGS, Controller, language_for, resolve_theme
 from nvidia_vbios.windows_loader.devices import REG_BINARY, REG_DWORD, REG_SZ
 from test_windows_loader import RTX_5070, RTX_5070_TI, UNRELATED, FakeKey, FakePlatform, adapter, chain, platform, rom
 
@@ -268,6 +268,16 @@ class ControllerTests(unittest.TestCase):
         c.busy = True                     # not while a load or unload runs
         c.set_language('en')
         self.assertEqual(c.language, 'es')
+
+    def test_theme_auto_follows_the_windows_app_mode(self):
+        self.assertEqual(Controller(FakePlatform()).theme, 'auto')
+        self.assertEqual((resolve_theme('auto', lambda: True), resolve_theme('auto', lambda: False)), ('dark', 'light'))
+        for mode in ('light', 'dark'):
+            self.assertEqual(resolve_theme(mode, lambda: mode == 'light'), mode)
+        with self.assertRaises(ValueError):
+            resolve_theme('blue')
+        if os.name != 'nt':
+            self.assertEqual(resolve_theme('auto'), 'light')     # no Windows registry: light
 
     @unittest.skipIf(os.name == 'nt', 'checks the behaviour on other systems')
     def test_controller_needs_no_tk_and_the_window_fails_cleanly_off_windows(self):

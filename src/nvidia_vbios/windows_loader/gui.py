@@ -1,8 +1,8 @@
 """vbios-loader-gui: a window to pick a GPU and a VBIOS file, then load or remove the override.
 
 Widgets only; the state, checks and texts are in controller.py, the registry work in operations.py.
-VBIOS_LOADER_GUI_SMOKE=1 opens the window, reads the status, switches to the other language and closes it
-after a few seconds.
+VBIOS_LOADER_GUI_SMOKE=1 opens the window, reads the status, switches to the other language and theme, and
+closes it after a few seconds.
 """
 from __future__ import annotations
 import argparse
@@ -14,11 +14,10 @@ import threading
 import tkinter as tk
 import traceback
 from tkinter import filedialog, font, messagebox, ttk
-from tkinter.scrolledtext import ScrolledText
 
 from . import __version__
 from .cli import windows_platform
-from .controller import LANGUAGES, Controller, system_language
+from .controller import LANGUAGES, THEMES, Controller, resolve_theme, system_language
 from .operations import LoaderError
 
 PROG = 'vbios-loader-gui'
@@ -26,6 +25,37 @@ SMOKE_ENV = 'VBIOS_LOADER_GUI_SMOKE'
 SMOKE_SECONDS = 20
 COLUMNS = (('col_index', 40), ('col_name', 230), ('col_pci', 90), ('col_location', 80), ('col_driver', 150),
            ('col_override', 300))
+# Light keeps the native ttk theme; dark draws ttk's clam theme with these colors.
+PALETTES = {
+    'light': dict(ok='#176317', bad='#9b1c1c', banner_bg='#fde2e1', banner_fg='#7a1010', text_bg='#ffffff',
+                  text_fg='#000000', select='#0078d7', select_fg='#ffffff'),
+    'dark': dict(ok='#7fd88f', bad='#ff8a80', banner_bg='#4a1f1f', banner_fg='#ffd8d4', text_bg='#1b1b1b',
+                 text_fg='#e8e8e8', select='#1f5fa8', select_fg='#ffffff', bg='#202020', field='#2b2b2b',
+                 fg='#e8e8e8', border='#454545', button='#333333', active='#404040', pressed='#4a4a4a',
+                 disabled='#7a7a7a'),
+}
+DWMWA_USE_IMMERSIVE_DARK_MODE = (20, 19)     # Windows 10 20H1 and later; 19 before
+
+
+def style_dark(style, p):
+    style.theme_use('clam')
+    style.configure('.', background=p['bg'], foreground=p['fg'], fieldbackground=p['field'], bordercolor=p['border'],
+                    darkcolor=p['bg'], lightcolor=p['bg'], troughcolor=p['bg'], selectbackground=p['select'],
+                    selectforeground=p['select_fg'], insertcolor=p['fg'], focuscolor=p['border'])
+    style.map('.', foreground=[('disabled', p['disabled'])], background=[('disabled', p['bg'])])
+    style.configure('TButton', background=p['button'], padding=(10, 3))
+    style.map('TButton', background=[('disabled', p['bg']), ('pressed', p['pressed']), ('active', p['active'])])
+    style.configure('TCheckbutton', indicatorbackground=p['field'], indicatorforeground=p['fg'])
+    style.map('TCheckbutton', background=[('active', p['bg'])],
+              indicatorbackground=[('disabled', p['bg']), ('selected', p['select'])])
+    style.map('TEntry', fieldbackground=[('readonly', p['field'])], foreground=[('readonly', p['fg'])])
+    style.configure('Treeview', background=p['field'], fieldbackground=p['field'], foreground=p['fg'])
+    style.map('Treeview', background=[('selected', p['select'])], foreground=[('selected', p['select_fg'])])
+    style.configure('Treeview.Heading', background=p['button'], foreground=p['fg'])
+    style.map('Treeview.Heading', background=[('active', p['active'])])
+    style.configure('TLabelframe.Label', foreground=p['fg'])
+    style.configure('TScrollbar', background=p['button'], arrowcolor=p['fg'])
+    style.map('TScrollbar', background=[('active', p['active'])])
 
 
 class Window:
@@ -39,9 +69,40 @@ class Window:
         root.rowconfigure(4, weight=2)
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.report_callback_exception = self.callback_error
-        ttk.Style(root).configure('Treeview', rowheight=font.nametofont('TkDefaultFont').metrics('linespace') + 6)
+        self.style = ttk.Style(root)
+        self.native_theme = self.style.theme_use()
         self.language = tk.StringVar(value=controller.language)
+        self.theme = tk.StringVar(value=controller.theme)
+        self.apply_theme()
         self.build()
+
+    def apply_theme(self):
+        self.palette = p = PALETTES[resolve_theme(self.c.theme)]
+        if 'bg' in p:
+            style_dark(self.style, p)
+        else:
+            self.style.theme_use(self.native_theme)
+        self.style.configure('Treeview', rowheight=font.nametofont('TkDefaultFont').metrics('linespace') + 6)
+        background = p.get('bg') or self.style.lookup('.', 'background')
+        if background:
+            self.root.configure(bg=background)
+        self.root.after(50, self.dark_title_bar)
+
+    def dark_title_bar(self):
+        """Ask Windows to draw this window's title bar dark or light, like the rest of the window."""
+        if os.name != 'nt':
+            return
+        try:
+            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            value = ctypes.c_int(int('bg' in self.palette))
+            for attribute in DWMWA_USE_IMMERSIVE_DARK_MODE:
+                if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attribute, ctypes.byref(value),
+                                                              ctypes.sizeof(value)) == 0:
+                    break
+            # Redraw the frame now: SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED.
+            ctypes.windll.user32.SetWindowPos(hwnd, None, 0, 0, 0, 0, 0x1 | 0x2 | 0x4 | 0x10 | 0x20)
+        except (AttributeError, OSError, tk.TclError):
+            pass
 
     def build(self):
         """Create the widgets in the controller's language (again after a language change)."""
@@ -54,10 +115,16 @@ class Window:
             languages.add_radiobutton(label=name, value=code, variable=self.language,
                                       command=lambda code=code: self.set_language(code))
         menubar.add_cascade(label=t['language'], menu=languages)
+        themes = tk.Menu(menubar, tearoff=False)
+        for mode in THEMES:
+            themes.add_radiobutton(label=t['theme_' + mode], value=mode, variable=self.theme,
+                                   command=lambda mode=mode: self.set_theme(mode))
+        menubar.add_cascade(label=t['theme'], menu=themes)
         root.configure(menu=menubar)
 
-        self.banner = tk.Label(root, text=t['not_admin'], bg='#fde2e1', fg='#7a1010', anchor='w', justify='left',
-                               padx=10, pady=6, wraplength=740)
+        p = self.palette
+        self.banner = tk.Label(root, text=t['not_admin'], bg=p['banner_bg'], fg=p['banner_fg'], anchor='w',
+                               justify='left', padx=10, pady=6, wraplength=740)
         self.banner.grid(row=0, column=0, sticky='ew', padx=8, pady=(8, 0))
 
         gpus = ttk.LabelFrame(root, text=t['gpus'], padding=6)
@@ -105,8 +172,13 @@ class Window:
         messages.grid(row=4, column=0, sticky='nsew', padx=8, pady=8)
         messages.columnconfigure(0, weight=1)
         messages.rowconfigure(0, weight=1)
-        self.log_text = ScrolledText(messages, height=8, wrap='word', state='disabled')
+        self.log_text = tk.Text(messages, height=8, wrap='word', state='disabled', bg=p['text_bg'], fg=p['text_fg'],
+                                insertbackground=p['text_fg'], selectbackground=p['select'],
+                                selectforeground=p['select_fg'], relief='flat', highlightthickness=0)
+        log_scroll = ttk.Scrollbar(messages, orient='vertical', command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scroll.set)
         self.log_text.grid(row=0, column=0, sticky='nsew')
+        log_scroll.grid(row=0, column=1, sticky='ns')
 
     def log(self, lines):
         if not lines:
@@ -139,6 +211,17 @@ class Window:
             self.language.set(self.c.language)
             return
         self.c.set_language(language)
+        self.rebuild()
+
+    def set_theme(self, theme):
+        if self.c.busy:
+            self.theme.set(self.c.theme)
+            return
+        self.c.theme = theme
+        self.apply_theme()
+        self.rebuild()
+
+    def rebuild(self):
         messages = self.log_text.get('1.0', 'end-1c')
         for child in self.root.winfo_children():
             child.destroy()
@@ -155,7 +238,7 @@ class Window:
             self.banner.grid()
         self.path.set(c.path or '')
         ok, text = c.validation_text()
-        self.validation.configure(text=text, foreground='#176317' if ok else '#9b1c1c')
+        self.validation.configure(text=text, foreground=self.palette['ok' if ok else 'bad'])
         idle = ['!disabled'] if not c.busy else ['disabled']
         for widget in (self.refresh_button, self.file_button, self.restart_box):
             widget.state(idle)
@@ -226,6 +309,8 @@ def main(argv=None, platform=None):
     parser = argparse.ArgumentParser(prog=PROG, description=__doc__.split('\n')[0])
     parser.add_argument('--version', action='version', version=f'{PROG} {__version__}')
     parser.add_argument('--lang', choices=('en', 'es'), help='language (default: the Windows display language)')
+    parser.add_argument('--theme', choices=THEMES, default='auto',
+                        help='light or dark (default auto: the Windows app mode)')
     args = parser.parse_args(argv)
     try:
         platform = platform or windows_platform()
@@ -236,13 +321,15 @@ def main(argv=None, platform=None):
     if os.name == 'nt':
         _dpi_aware()
     root = tk.Tk()
-    window = Window(root, Controller(platform, args.lang or system_language()))
+    window = Window(root, Controller(platform, args.lang or system_language(), args.theme))
     window.refresh()
     if smoke:
         root.attributes('-topmost', True)
-        # The window is rebuilt once in the other language, so the CI screenshot shows the switch.
+        # The window is rebuilt in the other language and the other theme, so the CI screenshot shows both.
         other = next(code for code, _ in LANGUAGES if code != window.c.language)
         root.after(3000, lambda: window.set_language(other))
+        contrast = 'light' if resolve_theme(window.c.theme) == 'dark' else 'dark'
+        root.after(5000, lambda: window.set_theme(contrast))
         root.after(SMOKE_SECONDS * 1000, root.destroy)
     root.mainloop()
     return 1 if smoke and window.failed else 0

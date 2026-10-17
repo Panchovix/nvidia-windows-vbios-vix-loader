@@ -73,6 +73,7 @@ STRINGS = {
         'hint_remove_first': 'In this window: use Remove override first.',
         'hint_refresh': 'In this window: click Refresh and select the GPU again.',
         'language': 'Language',
+        'theme': 'Theme', 'theme_auto': 'System', 'theme_light': 'Light', 'theme_dark': 'Dark',
     },
     'es': {
         'title': 'Windows VBIOS Vix Loader',
@@ -136,6 +137,7 @@ STRINGS = {
         'hint_remove_first': 'En esta ventana: usa primero Quitar reemplazo.',
         'hint_refresh': 'En esta ventana: pulsa Actualizar y vuelve a elegir la GPU.',
         'language': 'Idioma',
+        'theme': 'Tema', 'theme_auto': 'Sistema', 'theme_light': 'Claro', 'theme_dark': 'Oscuro',
     },
 }
 
@@ -157,11 +159,32 @@ def system_language():
 
 # Each language is named in itself in the Language menu.
 LANGUAGES = (('en', 'English'), ('es', 'Español'))
+THEMES = ('auto', 'light', 'dark')
+
+
+def windows_dark_mode():
+    """True when Windows asks apps for the dark mode (Settings > Personalization > Colors)."""
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize') as key:
+            value, kind = winreg.QueryValueEx(key, 'AppsUseLightTheme')
+    except (ImportError, OSError):
+        return False
+    return kind == winreg.REG_DWORD and value == 0
+
+
+def resolve_theme(mode, dark_mode=windows_dark_mode):
+    """'light' or 'dark'; auto follows the Windows app mode."""
+    if mode not in THEMES:
+        raise ValueError('unknown theme')
+    return mode if mode != 'auto' else ('dark' if dark_mode() else 'light')
 
 
 class Controller:
-    def __init__(self, platform, language='en'):
+    def __init__(self, platform, language='en', theme='auto'):
         self.platform, self.language, self.text = platform, language, STRINGS[language]
+        self.theme = theme            # auto, light or dark; the window resolves auto with resolve_theme
         self.gpus, self.admin = [], False
         self.selected = None          # instance id of the selected GPU
         self.path = self.data = None

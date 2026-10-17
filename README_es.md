@@ -176,4 +176,7 @@ terceros.
 
 ## Licencia
 
-MIT. Ver [LICENSE](LICENSE) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright (C) 2026 panchovix. Licencia Pública General de GNU v3.0 o posterior (`GPL-3.0-or-later`), ver
+[LICENSE](LICENSE): puedes usarlo, estudiarlo, modificarlo y compartirlo, y las versiones modificadas que
+compartas deben seguir bajo la misma licencia. Ver también [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). La
+versión 0.1.0 se publicó bajo la licencia MIT.

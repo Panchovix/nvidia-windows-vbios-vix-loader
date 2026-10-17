@@ -7,7 +7,7 @@ name = "nvidia-windows-vbios-vix-loader"
 version = "0.1.0"
 description = "Load a modified VBIOS on Windows through the NVIDIA driver's registry override, without flashing"
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-or-later"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.11"
 classifiers = [

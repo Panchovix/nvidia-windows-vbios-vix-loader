@@ -167,4 +167,7 @@ screenshot), and publishes tagged versions as releases with `SHA256SUMS` and the
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright (C) 2026 panchovix. GNU General Public License v3.0 or later (`GPL-3.0-or-later`), see
+[LICENSE](LICENSE): you can use, study, change and share it, and changed versions you share must stay under
+the same license. See also [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Version 0.1.0 was released under
+the MIT license.

@@ -8,7 +8,8 @@ A platform object provides:
   get(name) -> (type, value) | None, set(name, type, value), delete(name) -> bool,
   flush() and close();
 - is_admin() -> bool;
-- restart_device(instance_id) -> (exit code or None, output text).
+- restart_device(instance_id) -> (exit code or None, output text);
+- vbios_image(adapter) -> bytes: the VBIOS image the driver is running (nvapi.py).
 
 win32.py implements it with SetupAPI and the registry functions; tests use a fake.
 Nothing in this module needs Windows.

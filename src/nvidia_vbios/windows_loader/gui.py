@@ -1,4 +1,4 @@
-"""vbios-loader-gui: a window to pick a GPU and a VBIOS file, then load or remove the override.
+"""vbios-loader-gui: a window to pick a GPU and a VBIOS file, then load, remove or verify the override.
 
 Widgets only; the state, checks and texts are in controller.py, the registry work in operations.py.
 VBIOS_LOADER_GUI_SMOKE=1 opens the window, reads the status, switches to the other language and theme, and
@@ -65,6 +65,7 @@ class Window:
         self.root, self.c = root, controller
         self.results = queue.Queue()
         self.failed = False
+        self.action = None            # the action running in the worker
         root.minsize(780, 540)
         root.columnconfigure(0, weight=1)
         root.rowconfigure(2, weight=1)
@@ -172,6 +173,8 @@ class Window:
         self.load_button.grid(row=0, column=2, padx=(0, 6))
         self.remove_button = ttk.Button(actions, text=t['remove'], command=self.remove)
         self.remove_button.grid(row=0, column=3)
+        self.verify_button = ttk.Button(actions, text=t['verify'], command=self.verify)
+        self.verify_button.grid(row=0, column=4, padx=(6, 0))
 
         messages = ttk.LabelFrame(root, text=t['messages'], padding=6)
         messages.grid(row=5, column=0, sticky='nsew', padx=8, pady=8)
@@ -249,7 +252,8 @@ class Window:
             widget.state(idle)
         self.load_button.state(['!disabled'] if c.can_load() else ['disabled'])
         self.remove_button.state(['!disabled'] if c.can_remove() else ['disabled'])
-        self.working.configure(text=self.t['working'] if c.busy else '')
+        self.verify_button.state(['!disabled'] if c.can_verify() else ['disabled'])
+        self.working.configure(text=self.t['verifying' if self.action == 'verify' else 'working'] if c.busy else '')
 
     def on_select(self, _event=None):
         selection = self.tree.selection()
@@ -281,8 +285,12 @@ class Window:
         elif messagebox.askokcancel(self.t['confirm_remove_title'], question, icon='warning', parent=self.root):
             self.start('unload')
 
+    def verify(self):
+        if self.c.can_verify():      # reads only: no confirmation
+            self.start('verify')
+
     def start(self, action):
-        self.c.busy = True
+        self.c.busy, self.action = True, action
         self.update_controls()
         threading.Thread(target=lambda: self.results.put(self.c.run(action)), daemon=True).start()
         self.root.after(200, self.poll)
@@ -299,7 +307,7 @@ class Window:
         (messagebox.showinfo if ok else messagebox.showerror)(self.t['title'], '\n\n'.join(lines), parent=self.root)
 
     def close(self):
-        if not self.c.busy:       # a load or unload in progress finishes first
+        if not self.c.busy:       # a load, unload or verify in progress finishes first
             self.root.destroy()
 
 

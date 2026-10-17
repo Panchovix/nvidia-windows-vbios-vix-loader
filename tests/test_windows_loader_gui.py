@@ -13,6 +13,7 @@ import unittest
 from nvidia_vbios.windows_loader import controller as gui_controller, operations as ops
 from nvidia_vbios.windows_loader.controller import STRINGS, Controller, language_for, resolve_theme
 from nvidia_vbios.windows_loader.devices import REG_BINARY, REG_DWORD, REG_SZ
+from nvidia_vbios.windows_loader.nvapi import NvApiError
 from test_windows_loader import RTX_5070, RTX_5070_TI, UNRELATED, FakeKey, FakePlatform, adapter, chain, platform, rom
 
 
@@ -156,6 +157,91 @@ class ControllerTests(unittest.TestCase):
             raise RuntimeError('boom')
         fake.admin, fake.restart_device = True, broken
         self.assertEqual(c.run('unload'), (False, ['Unexpected error: RuntimeError: boom']))
+
+    def test_verify_needs_only_a_selected_gpu_and_reports_each_state(self):
+        fake, key = platform(admin=False, image=b'card image')
+        c = self.controller(fake)
+        self.assertTrue(c.can_verify())                 # no file and no administrator rights needed
+        ok, lines = c.run('verify')
+        self.assertEqual((ok, lines[0]), (True, "GPU 0: no override stored: the driver should be using the card's "
+                                                'own VBIOS. If you just removed one, restart the GPU or Windows first.'))
+        self.assertTrue(lines[1].startswith('Running VBIOS: 10 bytes, sha256 '))
+        key.values = {ops.VBIOS: (REG_BINARY, b'card image'), 'romOverride00': (REG_BINARY, b'r')}
+        ok, lines = c.run('verify')
+        self.assertEqual((ok, lines[0]), (True, 'GPU 0: the driver is using the loaded override (verified byte by '
+                                                'byte).'))
+        self.assertEqual(len(lines), 3)                 # no romOverride note: it is only for no-override
+        self.assertTrue(lines[2].startswith('Stored override: 10 bytes, sha256 '))
+        key.values[ops.VBIOS] = (REG_BINARY, b'card imagf')
+        ok, lines = c.run('verify')
+        self.assertFalse(ok)
+        self.assertTrue(lines[0].startswith('GPU 0: the driver is NOT using the stored override. If you just loaded'))
+        self.assertEqual(lines[1], 'First difference at offset 0x9.')
+        self.assertEqual(key.calls, [])
+        c.busy = True
+        self.assertFalse(c.can_verify())
+        self.assertFalse(self.controller(FakePlatform()).can_verify())
+
+    def test_verify_texts_in_spanish_prefix_unstable_and_errors(self):
+        big = bytes(range(256)) * 4001
+        fake, key = platform(values={ops.VBIOS: (REG_BINARY, big)}, image=big[:1024000])
+        c = self.controller(fake, 'es')
+        ok, lines = c.run('verify')
+        self.assertEqual(lines[:2], ['GPU 0: los primeros 1024000 bytes de la VBIOS en uso coinciden con el '
+                                     'reemplazo cargado; el resto no se puede leer.',
+                                     'Solo se compararon los primeros 1024000 bytes: NvAPI entrega como máximo esa '
+                                     f'cantidad, y el reemplazo tiene {len(big)}.'])
+        self.assertTrue(ok)
+        self.assertEqual(self.controller(fake).run('verify')[1][0], 'GPU 0: the first 1024000 bytes the driver is '
+                                                                    'running match the loaded override; the rest '
+                                                                    'cannot be read back.')
+        fake.image = b'\xff' + big[1:1024000]
+        ok, lines = c.run('verify')
+        self.assertEqual((ok, lines[0].startswith('GPU 0: el driver NO está usando'), lines[2]),
+                         (False, True, 'Primera diferencia en el offset 0x0.'))
+        key.values = {'romOverride00': (REG_BINARY, b'r')}
+        self.assertEqual(c.run('verify')[1][:2], ['GPU 0: sin reemplazo guardado: el driver debería usar la VBIOS de '
+                                                  'la tarjeta. Si acabas de quitar uno, reinicia la GPU o Windows '
+                                                  'primero.',
+                                                  'También hay registros romOverride (mVolt+) guardados; el driver '
+                                                  'puede aplicarlos.'])
+        reads = iter([b'a', b'b'])
+        fake.vbios_image = lambda adapter: next(reads)
+        ok, lines = c.run('verify')
+        self.assertEqual((ok, lines[0]), (False, 'GPU 0: dos lecturas de la VBIOS en uso dieron resultados distintos; '
+                                                 'inténtalo de nuevo.'))
+
+        def failing(adapter):
+            raise NvApiError('this NVIDIA driver has no NvAPI_GPU_GetVbiosImage')
+        fake.vbios_image = failing
+        self.assertEqual(c.run('verify'), (False, ['Error: this NVIDIA driver has no NvAPI_GPU_GetVbiosImage']))
+
+    def test_window_verify_button(self):
+        if not importlib.util.find_spec('tkinter'):
+            self.skipTest('no tkinter')
+        import tkinter
+        try:
+            root = tkinter.Tk()
+        except tkinter.TclError as exc:                  # no display
+            self.skipTest(f'no Tk window: {exc}')
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        from nvidia_vbios.windows_loader import gui
+        window = gui.Window(root, Controller(platform(admin=False)[0], 'es', 'dark'))
+        self.assertEqual(str(window.verify_button.cget('text')), 'Verificar')
+        window.update_controls()
+        self.assertTrue(window.verify_button.instate(['disabled']))      # no GPU listed yet
+        window.refresh()
+        self.assertTrue(window.verify_button.instate(['!disabled']))
+        self.assertTrue(window.load_button.instate(['disabled']))
+        started = []
+        window.start = started.append
+        window.verify_button.invoke()
+        self.assertEqual(started, ['verify'])
+        window.c.busy, window.action = True, 'verify'
+        window.update_controls()
+        self.assertTrue(window.verify_button.instate(['disabled']))
+        self.assertEqual(str(window.working.cget('text')), STRINGS['es']['verifying'])
 
     def same_model(self):
         gpus = [adapter(i, location=f'0{i + 1}:00.0') for i in range(3)]

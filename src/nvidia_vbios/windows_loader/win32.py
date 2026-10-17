@@ -1,6 +1,7 @@
-"""Windows implementation of the device interface (devices.py): SetupAPI, the registry and pnputil.
+"""Windows implementation of the device interface (devices.py): SetupAPI, the registry, pnputil and NvAPI.
 
-Importing this module is harmless on other systems; the DLLs load when Win32Platform is created.
+Importing this module is harmless on other systems; the DLLs load when Win32Platform is created,
+nvapi64.dll only when vbios_image reads an image.
 """
 from __future__ import annotations
 import ctypes
@@ -8,6 +9,7 @@ from ctypes import wintypes
 import os
 import subprocess
 from .devices import REG_BINARY, REG_DWORD, REG_SZ, Adapter, parse_instance_id, parse_location, pci_location
+from .nvapi import read_vbios_image
 
 DIGCF_PRESENT = 0x2
 DICS_FLAG_GLOBAL = 0x1
@@ -199,6 +201,9 @@ class Win32Platform:
             if instance_id == adapter.instance_id:
                 return self._open(info, data, write)
         raise OSError(f'device {adapter.instance_id} is no longer present')
+
+    def vbios_image(self, adapter):
+        return read_vbios_image(adapter.location)
 
     def restart_device(self, instance_id):
         pnputil = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'pnputil.exe')

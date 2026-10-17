@@ -4,7 +4,8 @@ English | [Español](README_es.md)
 
 Loads a modified VBIOS for an NVIDIA GPU on Windows **without flashing it**. The image is stored in the
 GPU's driver registry key, where the NVIDIA driver looks for a VBIOS override when the device starts, and
-the device is restarted. `unload` removes it again. The card's flash chip is never written.
+the device is restarted. `verify` checks that the driver is running it, and `unload` removes it again. The
+card's flash chip is never written.
 
 Thanks to **@pantsoftime** ([overclock.net](https://www.overclock.net)), whose original `vbios_override` work
 this project family is built on. Without it, none of this would have been possible.
@@ -92,7 +93,9 @@ it: load that file. The commands below do the same from the command line.
 5. Click **Load** (the same as `load`), read the confirmation (GPU, file, registry changes) and accept. With
    **Restart the GPU now** on, the GPU is restarted (this can take up to 45 seconds); with it off, restart
    Windows afterwards.
-6. To go back to the card's own VBIOS, select the GPU and click **Remove override** (the same as
+6. To check that the driver is running the loaded VBIOS, click **Verify** (the same as `verify`, see
+   [Verify](#verify)).
+7. To go back to the card's own VBIOS, select the GPU and click **Remove override** (the same as
    `unload`).
 
 Every result and warning is also written in the **Messages** area. The window is in Spanish when Windows
@@ -114,6 +117,9 @@ in its folder.
 # Store the override and restart the GPU.
 .\vbios-loader.exe load .\payload.bin --gpu 0
 
+# Check that the driver is running the stored override.
+.\vbios-loader.exe verify --gpu 0
+
 # Remove it and restart the GPU.
 .\vbios-loader.exe unload --gpu 0
 ```
@@ -124,7 +130,8 @@ in its folder.
 - `--json` prints machine-readable output.
 - Exit codes: `0` done, `1` refused or failed (nothing written unless the message says so), `2` invalid
   command-line arguments (nothing written), `3` values written but the GPU restart failed (restart Windows),
-  `70` unexpected internal error, `130` interrupted (Ctrl+C).
+  `4` `verify` found that the driver is not running the stored override (or its two reads differed), `70`
+  unexpected internal error, `130` interrupted (Ctrl+C).
 
 The override stays in the GPU's registry key until you remove it, so it applies again at every Windows
 start. A clean driver installation or a driver update can recreate the driver key and drop the override. Run
@@ -133,6 +140,26 @@ start. A clean driver installation or a driver update can recreate the driver ke
 From source, with Python 3.11 or newer: `pip install .` then `vbios-loader status` or `vbios-loader-gui`, or
 `python -m nvidia_vbios.windows_loader status` / `python -m nvidia_vbios.windows_loader.gui` with `src` on
 `PYTHONPATH`.
+
+## Verify
+
+**Verify** in the window, or `verify` on the command line, reads back through NvAPI the VBIOS image that the
+driver's GSP firmware is running, twice, and compares it byte by byte with the override stored in the
+registry. It writes nothing and needs no administrator rights. The result (`state` in `--json`) is one of:
+
+- `override-active`: the running image is the stored override, so the driver accepted it.
+- `override-not-active`: they differ, and the first differing offset is shown. Right after a load without a
+  GPU restart this is expected; otherwise the driver probably rejected the override and is running the
+  card's own VBIOS.
+- `no-override`: nothing is stored, so the driver should be running the card's own VBIOS (its size and
+  sha256 are shown). A removed override keeps running until the GPU or Windows restarts, and Verify cannot
+  tell it apart, so restart before checking a removal.
+- `unstable`: the two reads differ; try again.
+
+NvAPI returns at most 1,024,000 bytes, so a longer override is compared on those bytes only: the result then
+says that the first 1,024,000 bytes match, not that it was verified byte by byte. Verify needs a driver whose
+NvAPI has `NvAPI_GPU_GetVbiosImage` (617.42 has it); with an older one the error says so. It does not work
+inside a virtual machine with a paravirtualized GPU (GPU-P).
 
 ## If the GPU does not start
 

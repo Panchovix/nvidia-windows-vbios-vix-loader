@@ -1,9 +1,10 @@
-"""status, load and unload on a device platform (devices.py). Pure logic: no Windows calls of its own.
+"""status, load, unload and verify on a device platform (devices.py). Pure logic: no Windows calls of its own.
 
 load stores the chain in the adapter's driver key, the same values the NVIDIA driver reads for
 a VBIOS override: 'vbios' (REG_BINARY), 'EnableGpuFirmware' = 0x11, and no 'romOverrideXX'
 records. The previous EnableGpuFirmware value (or its absence) is saved once in BACKUP so that
 unload can restore it. unload also deletes 'romOverrideXX' records. Nothing else in the key is touched.
+verify reads the image the driver is running (twice, through NvAPI) and compares it with 'vbios'.
 """
 from __future__ import annotations
 import hashlib
@@ -11,6 +12,7 @@ from ..families import architecture
 from ..payload import PayloadError
 from .devices import REG_BINARY, REG_DWORD, REG_SZ, TYPE_NAMES, normalize_location, nvidia_version
 from .image import extract_chain
+from .nvapi import IMAGE_SIZE
 
 VBIOS = 'vbios'
 FIRMWARE = 'EnableGpuFirmware'
@@ -20,6 +22,7 @@ ABSENT = 'absent'
 PATCH_RECORDS = tuple(f'romOverride{i:02X}' for i in range(256))
 MIN_DRIVER = (616, 56)
 RESTART_HINT = 'Restart Windows to apply the change.'
+VERIFY_OK = ('override-active', 'no-override')    # the driver runs what the registry says
 
 
 class LoaderError(Exception):
@@ -247,4 +250,53 @@ def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False, res
     finally:
         key.close()
     report['restart'] = _restart(platform, adapter, restart)
+    return report
+
+
+def _image(data):
+    return {'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+
+
+def verify(platform, *, gpu=None, pci=None, instance_id=None):
+    """Compare the VBIOS image the driver is running (read twice) with the override in the driver key. Read-only."""
+    adapter = select(platform.adapters(), gpu, pci, instance_id)
+    key = platform.open_key(adapter)
+    try:
+        stored, records = key.get(VBIOS), describe(key)['rom_override_records']
+    finally:
+        key.close()
+    configured = stored[1] if stored and stored[0] == REG_BINARY else None
+    running, again = platform.vbios_image(adapter), platform.vbios_image(adapter)
+    report = {'gpu': _adapter_info(adapter), 'readback': dict(_image(running), truncated=len(running) == IMAGE_SIZE),
+              'configured': None if configured is None else _image(configured), 'match': None, 'compared': None,
+              'first_difference': None, 'rom_override_records': records}
+    if running != again:
+        state, message = 'unstable', 'Two reads of the running VBIOS differ; try again.'
+        report['second_readback'] = _image(again)
+    elif configured is None:
+        # A removed override keeps running until the GPU restarts, and the readback cannot tell the two apart.
+        state, message = 'no-override', ("No override is stored, so the driver should be running the card's own "
+                                         'VBIOS. If one was just removed, restart the GPU or Windows first.')
+        if records:
+            message += " romOverride records are stored too; the driver may apply them to the card's VBIOS."
+    else:
+        # NvAPI cuts the image at IMAGE_SIZE bytes: a longer override is compared up to there.
+        prefix = len(running) == IMAGE_SIZE < len(configured)
+        expected = configured[:IMAGE_SIZE] if prefix else configured
+        report.update(match=running == expected, compared='prefix' if prefix else 'full')
+        if report['match'] and prefix:
+            state = 'override-active'
+            message = (f'The first {IMAGE_SIZE} bytes the driver is running match the stored override; NvAPI returns '
+                       f'no more, so the last {len(configured) - IMAGE_SIZE} bytes cannot be read back.')
+        elif report['match']:
+            state, message = 'override-active', 'The driver is using the stored override (verified byte by byte).'
+        else:
+            offset = next((i for i, (a, b) in enumerate(zip(running, expected)) if a != b),
+                          min(len(running), len(expected)))
+            report['first_difference'] = offset
+            state = 'override-not-active'
+            message = (f'The driver is NOT using the stored override (first difference at offset {offset:#x}). If it '
+                       'was just loaded, restart the GPU or Windows; otherwise the driver may have rejected it and is '
+                       "running the card's own VBIOS.")
+    report.update(state=state, message=message)
     return report

@@ -1,7 +1,7 @@
 """vbios-loader: load a modified VBIOS on Windows through the NVIDIA driver's registry override.
 
 Nothing is flashed: the image is stored in the GPU's driver registry key and used by the
-driver when the device starts. unload removes it.
+driver when the device starts. unload removes it; verify checks that the driver is running it.
 """
 from __future__ import annotations
 import argparse
@@ -10,7 +10,8 @@ import os
 from pathlib import Path
 import sys
 from . import __version__
-from .operations import MIN_DRIVER, LoaderError, load, status, unload
+from .nvapi import IMAGE_SIZE
+from .operations import MIN_DRIVER, VERIFY_OK, LoaderError, load, status, unload, verify
 
 PROG = 'vbios-loader'
 
@@ -29,14 +30,16 @@ def parser():
     p = commands.add_parser('status', help='list NVIDIA GPUs and their override state')
     p.add_argument('--json', action='store_true', help='machine-readable output')
     for name, text in (('load', 'store a VBIOS override for one GPU and restart it'),
-                       ('unload', 'remove the override and restore the previous firmware setting')):
+                       ('unload', 'remove the override and restore the previous firmware setting'),
+                       ('verify', 'compare the VBIOS the driver is running with the stored override')):
         p = commands.add_parser(name, help=text)
         if name == 'load':
             p.add_argument('payload', type=Path, help='VBIOS file (see the README for which file to use)')
         p.add_argument('--gpu', type=int, metavar='INDEX', help='GPU index as shown by status')
         p.add_argument('--pci', metavar='BUS:DEV.FN', help='PCI location as shown by status, for example 01:00.0')
-        p.add_argument('--dry-run', action='store_true', help='show the registry changes without making them')
-        p.add_argument('--no-restart', action='store_true', help='do not restart the device afterwards')
+        if name != 'verify':
+            p.add_argument('--dry-run', action='store_true', help='show the registry changes without making them')
+            p.add_argument('--no-restart', action='store_true', help='do not restart the device afterwards')
         p.add_argument('--json', action='store_true', help='machine-readable output')
     return root
 
@@ -98,6 +101,22 @@ def _human_change(report):
     return '\n'.join(lines)
 
 
+def _image_text(image):
+    return f"{image['size']} bytes, sha256 {image['sha256']}"
+
+
+def _human_verify(report):
+    readback, configured = report['readback'], report['configured']
+    lines = _gpu_lines(report['gpu'])
+    lines.append('  running VBIOS (NvAPI): ' + _image_text(readback)
+                 + (f' (NvAPI returns at most {IMAGE_SIZE} bytes)' if readback['truncated'] else ''))
+    if report.get('second_readback'):
+        lines.append('  second read: ' + _image_text(report['second_readback']))
+    lines.append('  stored override: ' + (_image_text(configured) if configured else 'none'))
+    lines.append(report['message'])
+    return '\n'.join(lines)
+
+
 def main(argv=None, platform=None):
     args = parser().parse_args(argv)
     try:
@@ -106,6 +125,11 @@ def main(argv=None, platform=None):
             report = status(platform)
             print(json.dumps(report, indent=2) if args.json else _human_status(report))
             return 0
+        if args.command == 'verify':
+            report = verify(platform, gpu=args.gpu, pci=args.pci)
+            ok = report['state'] in VERIFY_OK
+            print(json.dumps(dict(report, ok=ok), indent=2) if args.json else _human_verify(report))
+            return 0 if ok else 4
         common = dict(gpu=args.gpu, pci=args.pci, dry_run=args.dry_run, restart=not args.no_restart)
         if args.command == 'load':
             try:

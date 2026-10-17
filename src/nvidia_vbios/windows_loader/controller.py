@@ -1,13 +1,13 @@
 """State of the loader window: selection, validation, button enablement and texts. No Tk here.
 
 Everything goes through operations.py: the list comes from status(), a file is checked with
-load(dry_run=True), and Load / Remove override run load() and unload(). gui.py only draws.
+load(dry_run=True), and Load / Remove override / Verify run load(), unload() and verify(). gui.py only draws.
 """
 from __future__ import annotations
 import ctypes
 import os
 from .cli import step_text
-from .operations import MIN_DRIVER, LoaderError, load, status, unload
+from .operations import MIN_DRIVER, VERIFY_OK, LoaderError, load, status, unload, verify
 
 MINIMUM = f'{MIN_DRIVER[0]}.{MIN_DRIVER[1]:02d}'
 
@@ -27,8 +27,10 @@ STRINGS = {
         'restart': 'Restart the GPU now',
         'load': 'Load',
         'remove': 'Remove override',
+        'verify': 'Verify',
         'messages': 'Messages',
         'working': 'Working... restarting the GPU can take up to 45 seconds.',
+        'verifying': 'Reading the VBIOS the driver is running...',
         'override_none': 'none',
         'override_loaded': 'loaded: {size} bytes, sha256 {sha}...',
         'override_other': "other tool's override: {size} bytes",
@@ -65,6 +67,22 @@ STRINGS = {
                           'apply the change.',
         'pnputil_code': 'pnputil exit code {code}',
         'pnputil_timeout': 'pnputil did not finish',
+        'verify_override-active': 'GPU {index}: the driver is using the loaded override (verified byte by byte).',
+        'verify_override-active-prefix': 'GPU {index}: the first {compared} bytes the driver is running match the '
+                                         'loaded override; the rest cannot be read back.',
+        'verify_override-not-active': 'GPU {index}: the driver is NOT using the stored override. If you just '
+                                      'loaded it, restart the GPU or Windows; otherwise the driver may have rejected '
+                                      "it and is running the card's own VBIOS.",
+        'verify_no-override': "GPU {index}: no override stored: the driver should be using the card's own VBIOS. "
+                              'If you just removed one, restart the GPU or Windows first.',
+        'verify_unstable': 'GPU {index}: two reads of the running VBIOS differ; try again.',
+        'verify_prefix': 'Only the first {compared} bytes were compared: NvAPI returns at most that many, and the '
+                         'override has {size}.',
+        'verify_difference': 'First difference at offset {offset}.',
+        'verify_records': "romOverride records (mVolt+) are stored too; the driver may apply them to the card's "
+                          'VBIOS.',
+        'verify_running': 'Running VBIOS: {size} bytes, sha256 {sha256}.',
+        'verify_stored': 'Stored override: {size} bytes, sha256 {sha256}.',
         'note': 'Note: {message}',
         'error': 'Error: {message}',
         'unexpected': 'Unexpected error: {message}',
@@ -90,8 +108,10 @@ STRINGS = {
         'restart': 'Reiniciar la GPU ahora',
         'load': 'Cargar',
         'remove': 'Quitar reemplazo',
+        'verify': 'Verificar',
         'messages': 'Mensajes',
         'working': 'Trabajando... reiniciar la GPU puede tardar hasta 45 segundos.',
+        'verifying': 'Leyendo la VBIOS que está usando el driver...',
         'override_none': 'ninguno',
         'override_loaded': 'cargado: {size} bytes, sha256 {sha}...',
         'override_other': 'reemplazo de otra herramienta: {size} bytes',
@@ -129,6 +149,22 @@ STRINGS = {
                           'Windows para aplicar el cambio.',
         'pnputil_code': 'pnputil terminó con código {code}',
         'pnputil_timeout': 'pnputil no terminó',
+        'verify_override-active': 'GPU {index}: el driver está usando el reemplazo cargado (verificado byte a byte).',
+        'verify_override-active-prefix': 'GPU {index}: los primeros {compared} bytes de la VBIOS en uso coinciden con '
+                                         'el reemplazo cargado; el resto no se puede leer.',
+        'verify_override-not-active': 'GPU {index}: el driver NO está usando el reemplazo guardado. Si lo acabas de '
+                                      'cargar, reinicia la GPU o Windows; si no, puede que el driver lo haya '
+                                      'rechazado y esté usando la VBIOS de la tarjeta.',
+        'verify_no-override': 'GPU {index}: sin reemplazo guardado: el driver debería usar la VBIOS de la tarjeta. '
+                              'Si acabas de quitar uno, reinicia la GPU o Windows primero.',
+        'verify_unstable': 'GPU {index}: dos lecturas de la VBIOS en uso dieron resultados distintos; inténtalo de '
+                           'nuevo.',
+        'verify_prefix': 'Solo se compararon los primeros {compared} bytes: NvAPI entrega como máximo esa cantidad, y '
+                         'el reemplazo tiene {size}.',
+        'verify_difference': 'Primera diferencia en el offset {offset}.',
+        'verify_records': 'También hay registros romOverride (mVolt+) guardados; el driver puede aplicarlos.',
+        'verify_running': 'VBIOS en uso: {size} bytes, sha256 {sha256}.',
+        'verify_stored': 'Reemplazo guardado: {size} bytes, sha256 {sha256}.',
         'note': 'Nota: {message}',
         'error': 'Error: {message}',
         'unexpected': 'Error inesperado: {message}',
@@ -314,6 +350,10 @@ class Controller:
         return bool(override['vbios'] is not None or override['rom_override_records']
                     or override['saved_previous_enable_gpu_firmware'] is not None)
 
+    def can_verify(self):
+        """Verify only reads (the registry and NvAPI), so it needs no administrator rights."""
+        return not self.busy and self.gpu is not None
+
     def _restart_note(self):
         return self.text['will_restart'] if self.restart else self.text['no_restart']
 
@@ -353,7 +393,7 @@ class Controller:
 
     # -- actions (run in a worker thread while busy) ------------------------------------------------------------
     def run(self, action):
-        """Load or remove on the selected GPU; returns (ok, message lines). Never raises."""
+        """Load, remove or verify on the selected GPU; returns (ok, message lines). Never raises."""
         try:
             return self._run(action)
         except (LoaderError, OSError) as exc:
@@ -363,6 +403,8 @@ class Controller:
 
     def _run(self, action):
         t = self.text
+        if action == 'verify':
+            return self._verify()
         if action == 'load':
             report = load(self.platform, self.data, instance_id=self.selected, restart=self.restart)
         else:
@@ -393,3 +435,20 @@ class Controller:
                 lines.append(restart['output'])
             return False, lines
         return True, lines
+
+    def _verify(self):
+        t = self.text
+        report = verify(self.platform, instance_id=self.selected)
+        readback, configured = report['readback'], report['configured']
+        state = report['state'] + ('-prefix' if report['match'] and report['compared'] == 'prefix' else '')
+        lines = [t['verify_' + state].format(index=report['gpu']['index'], compared=readback['size'])]
+        if report['compared'] == 'prefix':
+            lines.append(t['verify_prefix'].format(compared=readback['size'], size=configured['size']))
+        if report['first_difference'] is not None:
+            lines.append(t['verify_difference'].format(offset=f"{report['first_difference']:#x}"))
+        if report['state'] == 'no-override' and report['rom_override_records']:
+            lines.append(t['verify_records'])
+        lines.append(t['verify_running'].format(size=readback['size'], sha256=readback['sha256']))
+        if configured:
+            lines.append(t['verify_stored'].format(size=configured['size'], sha256=configured['sha256']))
+        return report['state'] in VERIFY_OK, lines

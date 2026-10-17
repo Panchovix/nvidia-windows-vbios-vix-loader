@@ -4,7 +4,8 @@
 
 Carga una VBIOS modificada en una GPU NVIDIA en Windows **sin flashearla**. La imagen se guarda en la clave
 de registro del driver de la GPU, donde el driver de NVIDIA busca una VBIOS de reemplazo al iniciar el
-dispositivo, y luego se reinicia la GPU. `unload` la quita. Nunca se escribe en el chip flash de la tarjeta.
+dispositivo, y luego se reinicia la GPU. `verify` comprueba que el driver la esté usando y `unload` la quita.
+Nunca se escribe en el chip flash de la tarjeta.
 
 Gracias a **@pantsoftime** ([overclock.net](https://www.overclock.net)), cuyo trabajo original con
 `vbios_override` es la base de estos proyectos. Sin él, nada de esto habría sido posible.
@@ -96,7 +97,9 @@ comandos.
 5. Haz clic en **Cargar** (lo mismo que `load`), lee la confirmación (GPU, archivo, cambios en el registro)
    y acepta. Con **Reiniciar la GPU ahora** marcado, la GPU se reinicia (puede tardar hasta 45 segundos); si
    lo desmarcas, reinicia Windows después.
-6. Para volver a la VBIOS propia de la tarjeta, elige la GPU y haz clic en **Quitar reemplazo** (lo mismo
+6. Para comprobar que el driver está usando la VBIOS cargada, haz clic en **Verificar** (lo mismo que
+   `verify`, ver [Verificar](#verificar)).
+7. Para volver a la VBIOS propia de la tarjeta, elige la GPU y haz clic en **Quitar reemplazo** (lo mismo
    que `unload`).
 
 Cada resultado y advertencia queda también en el área de **Mensajes**. La ventana sale en español si
@@ -119,6 +122,9 @@ esa carpeta.
 # Guarda la VBIOS de reemplazo y reinicia la GPU.
 .\vbios-loader.exe load .\payload.bin --gpu 0
 
+# Comprueba que el driver está usando el reemplazo guardado.
+.\vbios-loader.exe verify --gpu 0
+
 # La quita y reinicia la GPU.
 .\vbios-loader.exe unload --gpu 0
 ```
@@ -129,7 +135,9 @@ esa carpeta.
 - `--json` entrega la salida en formato para máquinas.
 - Códigos de salida: `0` listo, `1` rechazado o fallido (no se escribió nada salvo que el mensaje diga lo
   contrario), `2` argumentos de línea de comandos no válidos (no se escribió nada), `3` valores escritos pero
-  falló el reinicio de la GPU (reinicia Windows), `70` error interno inesperado, `130` interrumpido (Ctrl+C).
+  falló el reinicio de la GPU (reinicia Windows), `4` `verify` encontró que el driver no está usando el
+  reemplazo guardado (o sus dos lecturas no coincidieron), `70` error interno inesperado, `130` interrumpido
+  (Ctrl+C).
 
 El reemplazo queda en la clave de registro de la GPU hasta que lo quites, así que se vuelve a aplicar en
 cada inicio de Windows. Una instalación limpia o una actualización del driver puede volver a crear la clave
@@ -139,6 +147,27 @@ falta.
 Desde el código fuente, con Python 3.11 o más nuevo: `pip install .` y luego `vbios-loader status` o
 `vbios-loader-gui`, o `python -m nvidia_vbios.windows_loader status` /
 `python -m nvidia_vbios.windows_loader.gui` con `src` en `PYTHONPATH`.
+
+## Verificar
+
+**Verificar** en la ventana, o `verify` en la línea de comandos, lee mediante NvAPI la imagen de VBIOS que
+está ejecutando el firmware GSP del driver, dos veces, y la compara byte a byte con el reemplazo guardado en
+el registro. No escribe nada y no necesita permisos de administrador. El resultado (`state` en `--json`) es
+uno de estos:
+
+- `override-active`: la imagen en uso es el reemplazo guardado, así que el driver lo aceptó.
+- `override-not-active`: son distintas, y se muestra el primer offset que difiere. Justo después de cargarlo
+  sin reiniciar la GPU es lo esperado; si no, lo más probable es que el driver haya rechazado el reemplazo y
+  esté usando la VBIOS propia de la tarjeta.
+- `no-override`: no hay nada guardado, así que el driver debería usar la VBIOS propia de la tarjeta (se
+  muestran su tamaño y su sha256). Un reemplazo quitado sigue en uso hasta reiniciar la GPU o Windows, y
+  Verificar no puede distinguirlo, así que reinicia antes de comprobar que se quitó.
+- `unstable`: las dos lecturas no coinciden; inténtalo de nuevo.
+
+NvAPI entrega como máximo 1.024.000 bytes, así que un reemplazo más grande se compara solo en esos bytes: el
+resultado dice entonces que coinciden los primeros 1.024.000 bytes, no que se verificó byte a byte. Verificar
+necesita un driver cuya NvAPI tenga `NvAPI_GPU_GetVbiosImage` (617.42 la tiene); con uno más antiguo, el
+error lo indica. No funciona dentro de una máquina virtual con una GPU paravirtualizada (GPU-P).
 
 ## Si la GPU no arranca
 

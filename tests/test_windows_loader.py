@@ -81,9 +81,10 @@ class FakeKey:
 
 
 class FakePlatform:
-    def __init__(self, adapters=(), keys=None, admin=True, restart=(0, '')):
+    def __init__(self, adapters=(), keys=None, admin=True, restart=(0, ''), image=b''):
         self._adapters, self.keys, self.admin, self.restart = list(adapters), keys or {}, admin, restart
         self.restarted, self.writable_opens = [], 0
+        self.image, self.reads = image, []      # what vbios_image returns, and the devices it was read from
 
     def adapters(self):
         return self._adapters
@@ -98,6 +99,10 @@ class FakePlatform:
     def restart_device(self, instance_id):
         self.restarted.append(instance_id)
         return self.restart
+
+    def vbios_image(self, adapter):
+        self.reads.append(adapter.instance_id)
+        return self.image
 
 
 def adapter(index=0, device=RTX_5070, location='01:00.0', version='32.0.16.1656'):

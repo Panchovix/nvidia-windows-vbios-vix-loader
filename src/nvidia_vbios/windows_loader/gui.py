@@ -55,6 +55,8 @@ def style_dark(style, p):
     style.map('Treeview.Heading', background=[('active', p['active'])])
     style.configure('TLabelframe.Label', foreground=p['fg'])
     style.configure('TScrollbar', background=p['button'], arrowcolor=p['fg'])
+    style.configure('TMenubutton', background=p['button'], arrowcolor=p['fg'], padding=(8, 2))
+    style.map('TMenubutton', background=[('pressed', p['pressed']), ('active', p['active'])])
     style.map('TScrollbar', background=[('active', p['active'])])
 
 
@@ -65,8 +67,8 @@ class Window:
         self.failed = False
         root.minsize(780, 540)
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(1, weight=1)
-        root.rowconfigure(4, weight=2)
+        root.rowconfigure(2, weight=1)
+        root.rowconfigure(5, weight=2)
         root.protocol('WM_DELETE_WINDOW', self.close)
         root.report_callback_exception = self.callback_error
         self.style = ttk.Style(root)
@@ -109,26 +111,29 @@ class Window:
         root, controller = self.root, self.c
         self.t = t = controller.text
         root.title(f"{t['title']} {__version__}")
-        menubar = tk.Menu(root)
-        languages = tk.Menu(menubar, tearoff=False)
-        for code, name in LANGUAGES:
-            languages.add_radiobutton(label=name, value=code, variable=self.language,
-                                      command=lambda code=code: self.set_language(code))
-        menubar.add_cascade(label=t['language'], menu=languages)
-        themes = tk.Menu(menubar, tearoff=False)
-        for mode in THEMES:
-            themes.add_radiobutton(label=t['theme_' + mode], value=mode, variable=self.theme,
-                                   command=lambda mode=mode: self.set_theme(mode))
-        menubar.add_cascade(label=t['theme'], menu=themes)
-        root.configure(menu=menubar)
-
+        # Menu buttons instead of a menu bar: the Windows menu bar cannot be drawn dark.
         p = self.palette
+        colors = (dict(bg=p['field'], fg=p['fg'], activebackground=p['select'], activeforeground=p['select_fg'],
+                       selectcolor=p['fg'], relief='flat') if 'bg' in p else {})
+        bar = ttk.Frame(root, padding=(8, 6, 8, 0))
+        bar.grid(row=0, column=0, sticky='ew')
+        choices = ((t['language'], [(name, code) for code, name in LANGUAGES], self.language, self.set_language),
+                   (t['theme'], [(t['theme_' + mode], mode) for mode in THEMES], self.theme, self.set_theme))
+        for column, (title, items, variable, command) in enumerate(choices):
+            button = ttk.Menubutton(bar, text=title)
+            menu = tk.Menu(button, tearoff=False, **colors)
+            for name, value in items:
+                menu.add_radiobutton(label=name, value=value, variable=variable,
+                                     command=lambda value=value, command=command: command(value))
+            button['menu'] = menu
+            button.grid(row=0, column=column, padx=(0, 6))
+
         self.banner = tk.Label(root, text=t['not_admin'], bg=p['banner_bg'], fg=p['banner_fg'], anchor='w',
                                justify='left', padx=10, pady=6, wraplength=740)
-        self.banner.grid(row=0, column=0, sticky='ew', padx=8, pady=(8, 0))
+        self.banner.grid(row=1, column=0, sticky='ew', padx=8, pady=(8, 0))
 
         gpus = ttk.LabelFrame(root, text=t['gpus'], padding=6)
-        gpus.grid(row=1, column=0, sticky='nsew', padx=8, pady=(8, 0))
+        gpus.grid(row=2, column=0, sticky='nsew', padx=8, pady=(8, 0))
         gpus.columnconfigure(0, weight=1)
         gpus.rowconfigure(0, weight=1)
         self.tree = ttk.Treeview(gpus, columns=[key for key, _ in COLUMNS], show='headings', selectmode='browse',
@@ -145,7 +150,7 @@ class Window:
         self.refresh_button.grid(row=1, column=0, columnspan=2, sticky='e', pady=(6, 0))
 
         files = ttk.LabelFrame(root, text=t['file'], padding=6)
-        files.grid(row=2, column=0, sticky='ew', padx=8, pady=(8, 0))
+        files.grid(row=3, column=0, sticky='ew', padx=8, pady=(8, 0))
         files.columnconfigure(1, weight=1)
         self.file_button = ttk.Button(files, text=t['file_button'], command=self.choose_file)
         self.file_button.grid(row=0, column=0, sticky='w')
@@ -155,7 +160,7 @@ class Window:
         self.validation.grid(row=1, column=0, columnspan=2, sticky='w', pady=(6, 0))
 
         actions = ttk.Frame(root, padding=(8, 8, 8, 0))
-        actions.grid(row=3, column=0, sticky='ew')
+        actions.grid(row=4, column=0, sticky='ew')
         actions.columnconfigure(1, weight=1)
         self.restart = tk.BooleanVar(value=controller.restart)
         self.restart_box = ttk.Checkbutton(actions, text=t['restart'], variable=self.restart,
@@ -169,7 +174,7 @@ class Window:
         self.remove_button.grid(row=0, column=3)
 
         messages = ttk.LabelFrame(root, text=t['messages'], padding=6)
-        messages.grid(row=4, column=0, sticky='nsew', padx=8, pady=8)
+        messages.grid(row=5, column=0, sticky='nsew', padx=8, pady=8)
         messages.columnconfigure(0, weight=1)
         messages.rowconfigure(0, weight=1)
         self.log_text = tk.Text(messages, height=8, wrap='word', state='disabled', bg=p['text_bg'], fg=p['text_fg'],

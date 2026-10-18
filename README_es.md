@@ -54,6 +54,7 @@ y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
 | Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Usa los mismos valores de registro con los que mVolt+ carga archivos de BIOS en Blackwell. Probado en una RTX 5070 (driver 617.42): una VBIOS editada se cargó y funcionó al reiniciar la GPU, sin reiniciar Windows. |
 | Ada AD10x (GeForce RTX 40, RTX Ada) | Probado en una RTX 4090 (VBIOS 95.02.18, driver 617.42) con un payload `ada-relocated-v2`: se aplicaron un límite de potencia mayor (671 W) y un rango de offset de reloj del núcleo mayor (+1200 MHz). Las demás GPUs Ada están sin probar. |
 | Ampere GA102–GA107 (GeForce RTX 30, serie RTX A) | Probado en una RTX A2000 (driver 617.42) con un payload `ampere-relocated-v1`: se aplicó un mínimo de potencia menor (5 W). Las demás GPUs Ampere están sin probar. GA100 (A100, A30, A800) no está soportada. |
+| Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, serie T) | **Experimental, sin probar en ninguna GPU Turing.** El payload se acepta con las mismas comprobaciones; no se sabe si el driver de Windows usa el firmware GSP en Turing ni si aplica ahí el reemplazo. Si el reemplazo se rechaza, la tarjeta usa su VBIOS de fábrica. Consulta la [guía para probar Turing](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing_es.md). |
 
 Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 
@@ -83,6 +84,10 @@ comandos.
   Los payloads más grandes se rechazan.
 - **Ampere GA102–GA107**: el mismo límite de 512 KiB. Usa
   `.\nvbios.exe normalize editada.rom payload.bin --representation ampere-relocated-v1`.
+- **Turing TU102–TU117** (experimental): el payload cabe sin reubicar:
+  `.\nvbios.exe normalize editada.rom payload.bin`. Vix Editor 0.1.18 o posterior lo guarda como `<nombre>-loader.bin`, más
+  `<nombre>-loader-e0end.bin` (`--representation turing-e0-end-v1`) para probar si el primero se carga pero
+  el cambio no se aplica. Reporta el resultado de **Verificar** y `nvidia-smi -q -d POWER` antes y después.
 
 ## Uso
 

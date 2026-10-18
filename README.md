@@ -53,6 +53,7 @@ returns the key to its state before the first `load`, except that an override wr
 | Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Uses the same registry values that mVolt+ uses to load BIOS files on Blackwell. Tested on an RTX 5070 (driver 617.42): an edited VBIOS loaded and worked after a GPU restart, without restarting Windows. |
 | Ada AD10x (GeForce RTX 40, RTX Ada) | Tested on an RTX 4090 (VBIOS 95.02.18, driver 617.42) with an `ada-relocated-v2` payload: a raised power limit (671 W) and core clock offset range (+1200 MHz) applied. Other Ada GPUs are untested. |
 | Ampere GA102–GA107 (GeForce RTX 30, RTX A series) | Tested on an RTX A2000 (driver 617.42) with an `ampere-relocated-v1` payload: a lowered power floor (5 W) applied. Other Ampere GPUs are untested. GA100 (A100, A30, A800) is not supported. |
+| Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, T series) | **Experimental, not tested on any Turing GPU.** The payload is accepted with the same checks; whether the Windows driver runs the GSP firmware on Turing and applies the override there is unknown. If the override is refused, the card runs its stock VBIOS. See the [Turing tester guide](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing.md). |
 
 If you try it, please open an issue with the GPU, driver version and result.
 
@@ -79,6 +80,10 @@ it: load that file. The commands below do the same from the command line.
   payloads are refused.
 - **Ampere GA102–GA107**: the same 512 KiB limit. Use
   `.\nvbios.exe normalize edited.rom payload.bin --representation ampere-relocated-v1`.
+- **Turing TU102–TU117** (experimental): the payload fits without relocation:
+  `.\nvbios.exe normalize edited.rom payload.bin`. Vix Editor 0.1.18 or newer saves it as `<name>-loader.bin`, plus
+  `<name>-loader-e0end.bin` (`--representation turing-e0-end-v1`) to try if the first loads but the edit
+  does not apply. Report the **Verify** result and `nvidia-smi -q -d POWER` before and after.
 
 ## Usage
 

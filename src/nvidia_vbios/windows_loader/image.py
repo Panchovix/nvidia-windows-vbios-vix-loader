@@ -56,6 +56,6 @@ def extract_chain(data: bytes, vendor: int, device: int) -> Chain:
     start = find_legacy(data, vendor, device)
     end = chain_end(data, start)
     chain = data[start:end]
-    # Same checks on the stored bytes: one legacy image, and the 512 KiB GA10x/AD10x capacity.
+    # Same checks on the stored bytes: one legacy image, and the 512 KiB TU10x/TU11x, GA10x and AD10x capacity.
     family = check_loadable_payload(chain, vendor, device)
     return Chain(chain, family, start, end)

@@ -19,6 +19,7 @@ from nvidia_vbios.windows_loader.devices import (REG_BINARY, REG_DWORD, REG_SZ, 
 from nvidia_vbios.windows_loader.image import extract_chain
 
 RTX_5070, RTX_5070_TI, RTX_4090, RTX_A2000, A100 = 0x2C09, 0x2C05, 0x2684, 0x2531, 0x20B5
+RTX_2060_SUPER = 0x1F06
 PREFIX, TRAILING = 0x400, 0x300
 
 
@@ -160,6 +161,23 @@ class ChainTests(unittest.TestCase):
                 with self.assertRaisesRegex(PayloadError, '512 KiB'):
                     extract_chain(rom(device, fits + 1), 0x10DE, device)
         self.assertEqual(len(extract_chain(rom(RTX_5070, 1800), 0x10DE, RTX_5070).data), fixed + 1800 * 512)
+
+
+    def test_turing_chains_end_at_the_type_0x70_image_or_at_the_last_data_image(self):
+        # Experimental: Turing ends its chain with a small type-0x70 image (NPDS flagged last, no NPDE).
+        tail = bytearray(image(0, code_type=0xE0, blocks=1, last=True, npde=False))
+        tail[0x54] = 0x70
+        head = image(RTX_2060_SUPER) + image(RTX_2060_SUPER, code_type=3, blocks=1) + \
+            image(RTX_2060_SUPER, code_type=0xE0, blocks=1)
+        default = head + image(RTX_2060_SUPER, code_type=0xE0, blocks=4) + bytes(tail)
+        result = extract_chain(b'\xff' * PREFIX + default + b'\xff' * TRAILING, 0x10DE, RTX_2060_SUPER)
+        self.assertEqual((result.data, result.family), (default, 'turing'))
+        # turing-e0-end-v1: the last data image carries both last-image flags and the tail is gone.
+        e0_end = head + image(RTX_2060_SUPER, code_type=0xE0, blocks=4, last=True, pcir_last=True)
+        self.assertEqual(extract_chain(e0_end + b'\xff' * TRAILING, 0x10DE, RTX_2060_SUPER).data, e0_end)
+        fits = (GA10X_MAX_SIZE - 2 * 512 - 512) // 512
+        with self.assertRaisesRegex(PayloadError, 'Turing TU10x/TU11x GSP accepts at most 512 KiB'):
+            extract_chain(rom(RTX_2060_SUPER, fits + 1), 0x10DE, RTX_2060_SUPER)
 
 
 class LoadUnloadTests(unittest.TestCase):

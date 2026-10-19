@@ -7,6 +7,10 @@ de registro del driver de la GPU, donde el driver de NVIDIA busca una VBIOS de r
 dispositivo, y luego se reinicia la GPU. `verify` comprueba que el driver la esté usando y `unload` la quita.
 Nunca se escribe en el chip flash de la tarjeta.
 
+Funciona con los drivers NVIDIA 616.x y 617.x (616.56 o más nuevo; probado con 617.42 y 617.70). Podría dejar de
+funcionar en un driver futuro si NVIDIA decide cambiar o quitar el reemplazo por registro, así que usa
+**Verificar** después de cada actualización del driver.
+
 Gracias a **@pantsoftime** ([overclock.net](https://www.overclock.net)), cuyo trabajo original con
 `vbios_override` es la base de estos proyectos. Sin él, nada de esto habría sido posible.
 
@@ -63,9 +67,7 @@ Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 - Windows 10 u 11 de 64 bits.
 - Una cuenta de administrador. El programa con ventana pide permisos de administrador al abrirse; la
   herramienta de línea de comandos se ejecuta desde un PowerShell elevado ("Ejecutar como administrador").
-- Driver de NVIDIA **616.x o 617.x**, 616.56 o más nuevo (`status` muestra la versión). Solo se han probado
-  estos (617.42 y 617.70 en GPUs reales). Un driver más nuevo puede cambiar o quitar el reemplazo por
-  registro, así que usa **Verificar** después de cada actualización del driver.
+- Driver de NVIDIA **616.x o 617.x**, 616.56 o más nuevo (`status` muestra la versión).
 - Un archivo de payload para ese mismo modelo de GPU (el mismo ID de dispositivo PCI).
 
 ## Qué archivo cargar

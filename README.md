@@ -7,6 +7,10 @@ GPU's driver registry key, where the NVIDIA driver looks for a VBIOS override wh
 the device is restarted. `verify` checks that the driver is running it, and `unload` removes it again. The
 card's flash chip is never written.
 
+Works with NVIDIA 616.x and 617.x drivers (616.56 or newer; tested on 617.42 and 617.70). It may stop working
+in a future driver if NVIDIA decides to change or remove the registry override, so click **Verify** after every
+driver update.
+
 Thanks to **@pantsoftime** ([overclock.net](https://www.overclock.net)), whose original `vbios_override` work
 this project family is built on. Without it, none of this would have been possible.
 
@@ -62,9 +66,7 @@ If you try it, please open an issue with the GPU, driver version and result.
 - Windows 10 or 11, 64-bit.
 - An administrator account. The window program asks for administrator rights when it starts; run the
   command-line tool from an elevated PowerShell ("Run as administrator").
-- NVIDIA driver **616.x or 617.x**, 616.56 or newer (`status` shows the version). Only these have been tested
-  (617.42 and 617.70 on real GPUs). A newer driver can change or remove the registry override, so click
-  **Verify** after every driver update.
+- NVIDIA driver **616.x or 617.x**, 616.56 or newer (`status` shows the version).
 - A payload file for that exact GPU model (same PCI device ID).
 
 ## Which file to load

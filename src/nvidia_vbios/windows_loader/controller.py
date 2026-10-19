@@ -55,7 +55,8 @@ STRINGS = {
                           'Registry changes in the GPU\'s driver key:\n{steps}',
         'other_tool': 'This GPU has an override written by another tool (for example mVolt+). It is replaced and '
                       'will not be restored.',
-        'will_restart': 'The GPU is restarted afterwards; the screens on it can go black for a few seconds.',
+        'will_restart': 'The GPU is restarted afterwards; the screens on it can go black for a few seconds. If '
+                        'they stay black, restart Windows: the override stays stored.',
         'no_restart': 'The GPU is not restarted: restart Windows to apply the change.',
         'risk': 'A modified VBIOS can damage hardware. If the GPU does not start, see "If the GPU does not start" '
                 'in the README: boot into Safe Mode and remove the override.',
@@ -137,7 +138,7 @@ STRINGS = {
         'other_tool': 'Esta GPU tiene un reemplazo escrito por otra herramienta (por ejemplo mVolt+). Se reemplaza '
                       'y no se va a restaurar.',
         'will_restart': 'Después se reinicia la GPU; las pantallas conectadas a ella pueden quedar en negro unos '
-                        'segundos.',
+                        'segundos. Si siguen en negro, reinicia Windows: el reemplazo queda guardado.',
         'no_restart': 'La GPU no se reinicia: reinicia Windows para aplicar el cambio.',
         'risk': 'Una VBIOS modificada puede dañar el hardware. Si la GPU no arranca, revisa "Si la GPU no arranca" '
                 'en el README: arranca en Modo seguro y quita el reemplazo.',

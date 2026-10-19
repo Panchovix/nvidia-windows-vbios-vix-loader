@@ -56,8 +56,8 @@ returns the key to its state before the first `load`, except that an override wr
 | --- | --- |
 | Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Uses the same registry values that mVolt+ uses to load BIOS files on Blackwell. Tested on an RTX 5070 (driver 617.42): an edited VBIOS loaded and worked after a GPU restart, without restarting Windows. |
 | Ada AD10x (GeForce RTX 40, RTX Ada) | Tested on an RTX 4090 (VBIOS 95.02.18, driver 617.42) with an `ada-relocated-v2` payload: a raised power limit (671 W) and core clock offset range (+1200 MHz) applied. Other Ada GPUs are untested. |
-| Ampere GA102–GA107 (GeForce RTX 30, RTX A series) | Tested on an RTX A2000 (driver 617.42) with an `ampere-relocated-v1` payload: a lowered power floor (5 W) applied. Other Ampere GPUs are untested. GA100 (A100, A30, A800) is not supported. |
-| Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, T series) | **Experimental, not tested on any Turing GPU.** The payload is accepted with the same checks; whether the Windows driver runs the GSP firmware on Turing and applies the override there is unknown. If the override is refused, the card runs its stock VBIOS. See the [Turing tester guide](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing.md). |
+| Ampere GA102–GA107 (GeForce RTX 30, RTX A series) | Tested on an RTX A2000 (driver 617.42) with an `ampere-relocated-v1` payload: a lowered power floor (5 W) applied. On an RTX 3050 6GB Laptop GPU (driver 617.42) a lowered power ceiling (70 W) applied; a raised one is untested on laptops. Other Ampere GPUs are untested. GA100 (A100, A30, A800) is not supported. |
+| Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, T series) | **Experimental.** Tested on an RTX 2080 Ti (ROG Matrix BIOS, driver 617.70): with the board and connector power raised, the card reached about 458 W under load. An RTX 2070 SUPER also ran an edited image. Other Turing GPUs are untested. If the override is refused, the card runs its stock VBIOS. See the [Turing tester guide](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing.md). |
 
 If you try it, please open an issue with the GPU, driver version and result.
 
@@ -101,7 +101,9 @@ it: load that file. The commands below do the same from the command line.
    shows either OK (family, bytes to store, sha256) or why it is refused.
 5. Click **Load** (the same as `load`), read the confirmation (GPU, file, registry changes) and accept. With
    **Restart the GPU now** on, the GPU is restarted (this can take up to 45 seconds); with it off, restart
-   Windows afterwards.
+   Windows afterwards. If this GPU drives your screen, turn **Restart the GPU now** off and restart Windows
+   instead: restarting the GPU that drives the screen can leave it with no signal (seen on an RTX 2070 SUPER,
+   where the same override then worked after a full restart).
 6. To check that the driver is running the loaded VBIOS, click **Verify** (the same as `verify`, see
    [Verify](#verify)).
 7. To go back to the card's own VBIOS, select the GPU and click **Remove override** (the same as
@@ -174,6 +176,9 @@ inside a virtual machine with a paravirtualized GPU (GPU-P).
 
 Test first on a GPU that is **not** driving your display (use the integrated graphics or another card for
 the screen), so you can always run `unload`.
+
+If the screen stays black right after a load with **Restart the GPU now**, restart Windows first: the
+override stays stored and may work after a full restart.
 
 If Windows shows no image or the GPU fails in Device Manager:
 

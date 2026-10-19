@@ -57,8 +57,8 @@ y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
 | --- | --- |
 | Blackwell GB20x (GeForce RTX 50, RTX PRO Blackwell) | Usa los mismos valores de registro con los que mVolt+ carga archivos de BIOS en Blackwell. Probado en una RTX 5070 (driver 617.42): una VBIOS editada se cargó y funcionó al reiniciar la GPU, sin reiniciar Windows. |
 | Ada AD10x (GeForce RTX 40, RTX Ada) | Probado en una RTX 4090 (VBIOS 95.02.18, driver 617.42) con un payload `ada-relocated-v2`: se aplicaron un límite de potencia mayor (671 W) y un rango de offset de reloj del núcleo mayor (+1200 MHz). Las demás GPUs Ada están sin probar. |
-| Ampere GA102–GA107 (GeForce RTX 30, serie RTX A) | Probado en una RTX A2000 (driver 617.42) con un payload `ampere-relocated-v1`: se aplicó un mínimo de potencia menor (5 W). Las demás GPUs Ampere están sin probar. GA100 (A100, A30, A800) no está soportada. |
-| Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, serie T) | **Experimental, sin probar en ninguna GPU Turing.** El payload se acepta con las mismas comprobaciones; no se sabe si el driver de Windows usa el firmware GSP en Turing ni si aplica ahí el reemplazo. Si el reemplazo se rechaza, la tarjeta usa su VBIOS de fábrica. Consulta la [guía para probar Turing](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing_es.md). |
+| Ampere GA102–GA107 (GeForce RTX 30, serie RTX A) | Probado en una RTX A2000 (driver 617.42) con un payload `ampere-relocated-v1`: se aplicó un mínimo de potencia menor (5 W). En una RTX 3050 6GB Laptop GPU (driver 617.42) se aplicó un techo de potencia menor (70 W); subirlo no está probado en portátiles. Las demás GPUs Ampere están sin probar. GA100 (A100, A30, A800) no está soportada. |
+| Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, serie T) | **Experimental.** Probado en una RTX 2080 Ti (BIOS ROG Matrix, driver 617.70): con la potencia de la tarjeta y de los conectores subida, llegó a unos 458 W bajo carga. Una RTX 2070 SUPER también usó una imagen editada. Las demás GPUs Turing están sin probar. Si el reemplazo se rechaza, la tarjeta usa su VBIOS de fábrica. Consulta la [guía para probar Turing](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing_es.md). |
 
 Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 
@@ -105,7 +105,9 @@ comandos.
    muestra si es válido (familia, bytes a guardar, sha256) o por qué se rechaza.
 5. Haz clic en **Cargar** (lo mismo que `load`), lee la confirmación (GPU, archivo, cambios en el registro)
    y acepta. Con **Reiniciar la GPU ahora** marcado, la GPU se reinicia (puede tardar hasta 45 segundos); si
-   lo desmarcas, reinicia Windows después.
+   lo desmarcas, reinicia Windows después. Si esta GPU es la que da imagen a tu pantalla, desmarca
+   **Reiniciar la GPU ahora** y reinicia Windows: reiniciar la GPU que da imagen puede dejarla sin señal
+   (pasó en una RTX 2070 SUPER, donde el mismo reemplazo funcionó después de reiniciar el equipo).
 6. Para comprobar que el driver está usando la VBIOS cargada, haz clic en **Verificar** (lo mismo que
    `verify`, ver [Verificar](#verificar)).
 7. Para volver a la VBIOS propia de la tarjeta, elige la GPU y haz clic en **Quitar reemplazo** (lo mismo
@@ -182,6 +184,9 @@ error lo indica. No funciona dentro de una máquina virtual con una GPU paravirt
 
 Prueba primero en una GPU que **no** esté conectada a tu pantalla (usa los gráficos integrados u otra
 tarjeta para el monitor), así siempre podrás ejecutar `unload`.
+
+Si la pantalla queda en negro justo después de cargar con **Reiniciar la GPU ahora**, primero reinicia
+Windows: el reemplazo queda guardado y puede funcionar después de un reinicio completo.
 
 Si Windows no da imagen o la GPU aparece con error en el Administrador de dispositivos:
 

@@ -62,7 +62,9 @@ If you try it, please open an issue with the GPU, driver version and result.
 - Windows 10 or 11, 64-bit.
 - An administrator account. The window program asks for administrator rights when it starts; run the
   command-line tool from an elevated PowerShell ("Run as administrator").
-- NVIDIA driver **616.56 or newer** (`status` shows the version).
+- NVIDIA driver **616.x or 617.x**, 616.56 or newer (`status` shows the version). Only these have been tested
+  (617.42 and 617.70 on real GPUs). A newer driver can change or remove the registry override, so click
+  **Verify** after every driver update.
 - A payload file for that exact GPU model (same PCI device ID).
 
 ## Which file to load

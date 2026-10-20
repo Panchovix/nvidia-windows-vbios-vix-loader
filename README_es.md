@@ -159,6 +159,15 @@ Desde el código fuente, con Python 3.11 o más nuevo: `pip install .` y luego `
 `vbios-loader-gui`, o `python -m nvidia_vbios.windows_loader status` /
 `python -m nvidia_vbios.windows_loader.gui` con `src` en `PYTHONPATH`.
 
+### Avisos del antivirus
+
+Algunos antivirus y analizadores en línea marcan los dos exe (detecciones genéricas o "ML", "Python DLL
+sideloading"). Son falsos positivos: cada exe es un programa en Python empaquetado con Nuitka `--onefile`, que
+al arrancar descomprime el runtime de Python en una carpeta temporal, y los exe no están firmados. El loader no
+usa la red. Los compila GitHub Actions desde este repositorio (ver [Pruebas](#pruebas)); compara la descarga con
+`SHA256SUMS` para confirmar que coincide con el archivo publicado. Si prefieres no ejecutarlos, usa el loader
+desde el código fuente como se indica arriba.
+
 ## Verificar
 
 **Verificar** en la ventana, o `verify` en la línea de comandos, lee mediante NvAPI la imagen de VBIOS que

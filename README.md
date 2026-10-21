@@ -7,9 +7,11 @@ GPU's driver registry key, where the NVIDIA driver looks for a VBIOS override wh
 the device is restarted. `verify` checks that the driver is running it, and `unload` removes it again. The
 card's flash chip is never written.
 
-Works with NVIDIA 616.x and 617.x drivers (616.56 or newer; tested on 617.42 and 617.70). It may stop working
-in a future driver if NVIDIA decides to change or remove the registry override, so click **Verify** after every
-driver update.
+Works with NVIDIA 616.x, 617.x and 621.x drivers (616.56 or newer; tested on 617.42, 617.70 and 621.01). It may
+stop working in a future driver if NVIDIA decides to change or remove the registry override, so click **Verify**
+after every driver update. On 621.01 only Ada and Ampere are tested so far: overrides loaded on an RTX 4090 and an
+RTX A2000 stayed in place through the driver update, and after restarting Windows Verify reported both as
+`override-active`.
 
 Thanks to **@pantsoftime** ([overclock.net](https://www.overclock.net)), whose original `vbios_override` work
 this project family is built on. Without it, none of this would have been possible.
@@ -66,7 +68,7 @@ If you try it, please open an issue with the GPU, driver version and result.
 - Windows 10 or 11, 64-bit.
 - An administrator account. The window program asks for administrator rights when it starts; run the
   command-line tool from an elevated PowerShell ("Run as administrator").
-- NVIDIA driver **616.x or 617.x**, 616.56 or newer (`status` shows the version).
+- NVIDIA driver **616.x, 617.x or 621.x**, 616.56 or newer (`status` shows the version).
 - A payload file for that exact GPU model (same PCI device ID).
 
 ## Which file to load
@@ -178,8 +180,8 @@ registry. It writes nothing and needs no administrator rights. The result (`stat
 
 NvAPI returns at most 1,024,000 bytes, so a longer override is compared on those bytes only: the result then
 says that the first 1,024,000 bytes match, not that it was verified byte by byte. Verify needs a driver whose
-NvAPI has `NvAPI_GPU_GetVbiosImage` (617.42 has it); with an older one the error says so. It does not work
-inside a virtual machine with a paravirtualized GPU (GPU-P).
+NvAPI has `NvAPI_GPU_GetVbiosImage` (617.42 and 621.01 have it); with an older one the error says so. It does not
+work inside a virtual machine with a paravirtualized GPU (GPU-P).
 
 ## If the GPU does not start
 

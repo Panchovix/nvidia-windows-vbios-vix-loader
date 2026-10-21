@@ -7,9 +7,11 @@ de registro del driver de la GPU, donde el driver de NVIDIA busca una VBIOS de r
 dispositivo, y luego se reinicia la GPU. `verify` comprueba que el driver la esté usando y `unload` la quita.
 Nunca se escribe en el chip flash de la tarjeta.
 
-Funciona con los drivers NVIDIA 616.x y 617.x (616.56 o más nuevo; probado con 617.42 y 617.70). Podría dejar de
-funcionar en un driver futuro si NVIDIA decide cambiar o quitar el reemplazo por registro, así que usa
-**Verificar** después de cada actualización del driver.
+Funciona con los drivers NVIDIA 616.x, 617.x y 621.x (616.56 o más nuevo; probado con 617.42, 617.70 y 621.01).
+Podría dejar de funcionar en un driver futuro si NVIDIA decide cambiar o quitar el reemplazo por registro, así
+que usa **Verificar** después de cada actualización del driver. Con 621.01 por ahora solo están probadas Ada y
+Ampere: los reemplazos cargados en una RTX 4090 y una RTX A2000 se mantuvieron al actualizar el driver, y después
+de reiniciar Windows, Verificar mostró `override-active` en ambas.
 
 Gracias a **@pantsoftime** ([overclock.net](https://www.overclock.net)), cuyo trabajo original con
 `vbios_override` es la base de estos proyectos. Sin él, nada de esto habría sido posible.
@@ -67,7 +69,7 @@ Si lo pruebas, abre un issue con la GPU, la versión del driver y el resultado.
 - Windows 10 u 11 de 64 bits.
 - Una cuenta de administrador. El programa con ventana pide permisos de administrador al abrirse; la
   herramienta de línea de comandos se ejecuta desde un PowerShell elevado ("Ejecutar como administrador").
-- Driver de NVIDIA **616.x o 617.x**, 616.56 o más nuevo (`status` muestra la versión).
+- Driver de NVIDIA **616.x, 617.x o 621.x**, 616.56 o más nuevo (`status` muestra la versión).
 - Un archivo de payload para ese mismo modelo de GPU (el mismo ID de dispositivo PCI).
 
 ## Qué archivo cargar
@@ -186,7 +188,7 @@ uno de estos:
 
 NvAPI entrega como máximo 1.024.000 bytes, así que un reemplazo más grande se compara solo en esos bytes: el
 resultado dice entonces que coinciden los primeros 1.024.000 bytes, no que se verificó byte a byte. Verificar
-necesita un driver cuya NvAPI tenga `NvAPI_GPU_GetVbiosImage` (617.42 la tiene); con uno más antiguo, el
+necesita un driver cuya NvAPI tenga `NvAPI_GPU_GetVbiosImage` (617.42 y 621.01 la tienen); con uno más antiguo, el
 error lo indica. No funciona dentro de una máquina virtual con una GPU paravirtualizada (GPU-P).
 
 ## Si la GPU no arranca

@@ -10,8 +10,9 @@ card's flash chip is never written.
 Works with NVIDIA 616.x, 617.x and 621.x drivers (616.56 or newer; tested on 617.42, 617.70 and 621.01). It may
 stop working in a future driver if NVIDIA decides to change or remove the registry override, so click **Verify**
 after every driver update. On 621.01, overrides loaded on an RTX 4090 and an RTX A2000 stayed in place through the
-driver update (after restarting Windows, Verify reported both as `override-active`), and on an RTX 5070 an edited
-VBIOS loaded and worked after a GPU restart. Turing is not tested on 621.01 yet.
+driver update and, after restarting Windows, Verify reported both as `override-active`. On an RTX 5070, Verify
+reported `override-active` for an edited VBIOS loaded on 621.01 after a GPU restart, without restarting Windows.
+Turing is not tested on 621.01 yet.
 
 Thanks to **@pantsoftime** ([overclock.net](https://www.overclock.net)), whose original `vbios_override` work
 this project family is built on. Without it, none of this would have been possible.

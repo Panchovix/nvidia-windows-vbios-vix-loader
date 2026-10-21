@@ -9,9 +9,10 @@ Nunca se escribe en el chip flash de la tarjeta.
 
 Funciona con los drivers NVIDIA 616.x, 617.x y 621.x (616.56 o más nuevo; probado con 617.42, 617.70 y 621.01).
 Podría dejar de funcionar en un driver futuro si NVIDIA decide cambiar o quitar el reemplazo por registro, así
-que usa **Verificar** después de cada actualización del driver. Con 621.01 por ahora solo están probadas Ada y
-Ampere: los reemplazos cargados en una RTX 4090 y una RTX A2000 se mantuvieron al actualizar el driver, y después
-de reiniciar Windows, Verificar mostró `override-active` en ambas.
+que usa **Verificar** después de cada actualización del driver. Con 621.01, los reemplazos cargados en una RTX 4090
+y una RTX A2000 se mantuvieron al actualizar el driver (después de reiniciar Windows, Verificar mostró
+`override-active` en ambas), y en una RTX 5070 una VBIOS editada se cargó y funcionó al reiniciar la GPU. Turing
+todavía no está probada con 621.01.
 
 Gracias a **@pantsoftime** ([overclock.net](https://www.overclock.net)), cuyo trabajo original con
 `vbios_override` es la base de estos proyectos. Sin él, nada de esto habría sido posible.

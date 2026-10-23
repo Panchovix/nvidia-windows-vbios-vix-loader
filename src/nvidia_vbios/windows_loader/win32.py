@@ -8,7 +8,7 @@ import ctypes
 from ctypes import wintypes
 import os
 import subprocess
-from .devices import REG_BINARY, REG_DWORD, REG_SZ, Adapter, parse_instance_id, parse_location, pci_location
+from .devices import REG_SZ, Adapter, decode, encode, parse_instance_id, parse_location, pci_location
 from .nvapi import read_vbios_image
 
 DIGCF_PRESENT = 0x2
@@ -49,7 +49,8 @@ class RegistryKey:
         if status:
             raise OSError(status, f'{what} failed: {ctypes.FormatError(status).strip()}')
 
-    def get(self, name):
+    def get_raw(self, name):
+        """(type, exact bytes) of a value, or None when it does not exist."""
         kind, size = wintypes.DWORD(), wintypes.DWORD(0)
         while True:
             buffer = ctypes.create_string_buffer(max(size.value, 1))
@@ -60,21 +61,23 @@ class RegistryKey:
             if status != ERROR_MORE_DATA:
                 break
         self._check(status, f'reading {name}')
-        raw = buffer.raw[:size.value]
-        if kind.value == REG_DWORD and len(raw) == 4:
-            return REG_DWORD, int.from_bytes(raw, 'little')
-        if kind.value == REG_SZ:
-            return REG_SZ, raw.decode('utf-16-le', 'replace').split('\0', 1)[0]
-        return kind.value, raw
+        return kind.value, buffer.raw[:size.value]
+
+    def get(self, name):
+        value = self.get_raw(name)
+        return None if value is None else decode(*value)
+
+    def set_raw(self, name, kind, raw):
+        """Write exactly these bytes with this type; nothing is added or converted."""
+        raw = bytes(raw)
+        # For REG_SZ, REG_EXPAND_SZ and REG_MULTI_SZ data whose last character is not NUL, RegSetValueExW stores
+        # one more character when the two bytes after the counted data are zero. Two non-zero bytes there keep
+        # the stored data exactly len(raw) bytes.
+        self._check(self._api.RegSetValueExW(self._handle, name, 0, kind, raw + b'\xff\xff', len(raw)),
+                    f'writing {name}')
 
     def set(self, name, kind, value):
-        if kind == REG_DWORD:
-            raw = int(value).to_bytes(4, 'little')
-        elif kind == REG_SZ:
-            raw = (value + '\0').encode('utf-16-le')
-        else:
-            raw = bytes(value)
-        self._check(self._api.RegSetValueExW(self._handle, name, 0, kind, raw, len(raw)), f'writing {name}')
+        self.set_raw(name, kind, encode(kind, value))
 
     def delete(self, name):
         status = self._api.RegDeleteValueW(self._handle, name)

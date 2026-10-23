@@ -36,7 +36,7 @@ Corporation.
 | --- | --- | --- |
 | `vbios` | REG_BINARY | The VBIOS image chain from your file: from the legacy image to the end of the last image. Bytes before and after it in the file are not stored. |
 | `EnableGpuFirmware` | REG_DWORD | `0x11` (GSP firmware on, fallback allowed). |
-| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | The previous `EnableGpuFirmware` value, or `absent`. Saved on the first `load` only, so `unload` can restore it. |
+| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | The previous `EnableGpuFirmware` value, saved on the first `load` only so `unload` can restore it: `absent`, a DWORD such as `0x00000012`, or, if it was not a 4-byte REG_DWORD (another tool or a hand edit can leave a REG_SZ, REG_QWORD, REG_BINARY or a DWORD of another size there), an exact copy of its type and bytes written the way a `.reg` file writes them, for example `hex(1):31,00,00,00`. |
 
 It also deletes `romOverride00` to `romOverrideFF` if present, flushes the key, reads the values back and
 restarts the GPU with `pnputil /restart-device`. If the restart fails, restart Windows.
@@ -45,8 +45,10 @@ These are the same `vbios` and `EnableGpuFirmware` values that mVolt+ writes whe
 BIOS loaded with mVolt+ on the same GPU is replaced. This project is not affiliated with mVolt+. Other values
 in the key are left alone.
 
-`unload` deletes `vbios` and any `romOverride` records, restores `EnableGpuFirmware` (or deletes it if it was
-absent), deletes `VixLoaderPreviousEnableGpuFirmware` and restarts the GPU.
+`unload` deletes `vbios` and any `romOverride` records, restores `EnableGpuFirmware` exactly as it was, with
+the same type (or deletes it if it was absent), deletes `VixLoaderPreviousEnableGpuFirmware` and restarts the
+GPU. If the saved value starts with `hex(`, remove the override with version 0.3.2 or newer: older versions
+don't read that form, so they delete it and leave `EnableGpuFirmware` at `0x11`.
 
 It does **not** flash the card, edit the VBIOS, or change clocks, fans or power limits by itself. `unload`
 returns the key to its state before the first `load`, except that an override written by another tool
@@ -203,9 +205,25 @@ If Windows shows no image or the GPU fails in Device Manager:
    from `status`). Then restart Windows normally.
 3. If that does not work, open `regedit` and go to
    `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}`.
-   Open the numbered subkey whose `DriverDesc` is your GPU (`status` shows it as `driver_key`). Delete
-   `vbios`. Set `EnableGpuFirmware` back to the value saved in `VixLoaderPreviousEnableGpuFirmware`, or delete
-   `EnableGpuFirmware` if it says `absent`. Then delete `VixLoaderPreviousEnableGpuFirmware` and restart.
+   Open the numbered subkey whose `DriverDesc` is your GPU (`status` shows it as `driver_key`). If
+   `VixLoaderPreviousEnableGpuFirmware` starts with `hex(`, use step 4 instead. Otherwise delete `vbios`, set
+   `EnableGpuFirmware` back to the saved value, or delete `EnableGpuFirmware` if the saved value is `absent`.
+   Then delete `VixLoaderPreviousEnableGpuFirmware` and restart.
+4. If the saved value starts with `hex(`, `EnableGpuFirmware` was not a 4-byte REG_DWORD before the first
+   `load`, and the saved text is an exact copy of it in `.reg` file notation. The easiest way to put it back
+   is a `.reg` file instead of step 3: save these lines in Notepad as `restore.reg`, with `NNNN` replaced by
+   the subkey number and the text after `"EnableGpuFirmware"=` replaced by the saved value. Double-click the
+   file (or run `reg import restore.reg` in an elevated PowerShell) and restart. It also deletes `vbios` and
+   the saved value.
+
+   ```
+   Windows Registry Editor Version 5.00
+
+   [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\NNNN]
+   "vbios"=-
+   "EnableGpuFirmware"=hex(1):31,00,00,00
+   "VixLoaderPreviousEnableGpuFirmware"=-
+   ```
 
 ## Tests
 

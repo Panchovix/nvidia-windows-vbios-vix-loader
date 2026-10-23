@@ -37,7 +37,7 @@ de NVIDIA Corporation.
 | --- | --- | --- |
 | `vbios` | REG_BINARY | La cadena de imágenes de la VBIOS de tu archivo: desde la imagen legacy hasta el final de la última imagen. Lo que haya antes o después en el archivo no se guarda. |
 | `EnableGpuFirmware` | REG_DWORD | `0x11` (firmware GSP activado, con respaldo permitido). |
-| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | El valor anterior de `EnableGpuFirmware`, o `absent` si no existía. Se guarda solo en el primer `load`, para que `unload` pueda restaurarlo. |
+| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | El valor anterior de `EnableGpuFirmware`, guardado solo en el primer `load` para que `unload` pueda restaurarlo: `absent` si no existía, un DWORD como `0x00000012`, o, si no era un REG_DWORD de 4 bytes (otra herramienta o una edición a mano puede dejar ahí un REG_SZ, REG_QWORD, REG_BINARY o un DWORD de otro tamaño), una copia exacta de su tipo y sus bytes escrita como la escribe un archivo `.reg`, por ejemplo `hex(1):31,00,00,00`. |
 
 Además borra `romOverride00` a `romOverrideFF` si existen, hace flush de la clave, vuelve a leer los valores
 para comprobarlos y reinicia la GPU con `pnputil /restart-device`. Si el reinicio falla, reinicia Windows.
@@ -46,8 +46,10 @@ Son los mismos valores `vbios` y `EnableGpuFirmware` que escribe mVolt+ cuando c
 que una BIOS cargada con mVolt+ en la misma GPU queda reemplazada. Este proyecto no está afiliado a mVolt+.
 El resto de los valores de la clave no se tocan.
 
-`unload` borra `vbios` y los registros `romOverride` que haya, restaura `EnableGpuFirmware` (o lo borra si
-antes no existía), borra `VixLoaderPreviousEnableGpuFirmware` y reinicia la GPU.
+`unload` borra `vbios` y los registros `romOverride` que haya, restaura `EnableGpuFirmware` tal como estaba,
+con el mismo tipo (o lo borra si antes no existía), borra `VixLoaderPreviousEnableGpuFirmware` y reinicia la
+GPU. Si el valor guardado empieza con `hex(`, quita el reemplazo con la versión 0.3.2 o más nueva: las
+versiones anteriores no entienden esa forma, así que la borran y dejan `EnableGpuFirmware` en `0x11`.
 
 **No** flashea la tarjeta, no edita la VBIOS y no cambia por sí mismo relojes, ventiladores ni límites de
 potencia. `unload` deja la clave como estaba antes del primer `load`, salvo que un reemplazo escrito por otra
@@ -212,10 +214,25 @@ Si Windows no da imagen o la GPU aparece con error en el Administrador de dispos
    el índice de tu GPU según `status`). Luego reinicia Windows normalmente.
 3. Si eso no funciona, abre `regedit` y ve a
    `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}`.
-   Abre la subclave numerada cuyo `DriverDesc` sea tu GPU (`status` la muestra como `driver_key`). Borra
-   `vbios`. Vuelve a poner en `EnableGpuFirmware` el valor guardado en `VixLoaderPreviousEnableGpuFirmware`,
-   o borra `EnableGpuFirmware` si ahí dice `absent`. Luego borra `VixLoaderPreviousEnableGpuFirmware` y
-   reinicia.
+   Abre la subclave numerada cuyo `DriverDesc` sea tu GPU (`status` la muestra como `driver_key`). Si
+   `VixLoaderPreviousEnableGpuFirmware` empieza con `hex(`, usa el paso 4. Si no, borra `vbios` y vuelve a
+   poner en `EnableGpuFirmware` el valor guardado, o borra `EnableGpuFirmware` si el valor guardado es
+   `absent`. Luego borra `VixLoaderPreviousEnableGpuFirmware` y reinicia.
+4. Si el valor guardado empieza con `hex(`, `EnableGpuFirmware` no era un REG_DWORD de 4 bytes antes del
+   primer `load` y ese texto es una copia exacta en la notación de los archivos `.reg`. Lo más fácil para
+   volver a ponerlo es un archivo `.reg` en lugar del paso 3: guarda estas líneas en el Bloc de notas como
+   `restore.reg`, cambiando `NNNN` por el número de la subclave y el texto después de `"EnableGpuFirmware"=`
+   por el valor guardado. Haz doble clic en el archivo (o ejecuta `reg import restore.reg` en un PowerShell
+   elevado) y reinicia. También borra `vbios` y el valor guardado.
+
+   ```
+   Windows Registry Editor Version 5.00
+
+   [HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\NNNN]
+   "vbios"=-
+   "EnableGpuFirmware"=hex(1):31,00,00,00
+   "VixLoaderPreviousEnableGpuFirmware"=-
+   ```
 
 ## Pruebas
 

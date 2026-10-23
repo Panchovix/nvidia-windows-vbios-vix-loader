@@ -3,14 +3,18 @@
 load stores the chain in the adapter's driver key, the same values the NVIDIA driver reads for
 a VBIOS override: 'vbios' (REG_BINARY), 'EnableGpuFirmware' = 0x11, and no 'romOverrideXX'
 records. The previous EnableGpuFirmware value (or its absence) is saved once in BACKUP so that
-unload can restore it. unload also deletes 'romOverrideXX' records. Nothing else in the key is touched.
+unload can restore it: 'absent', '0x%08x' for a REG_DWORD, or for any other type (or a DWORD of
+another size) its exact type and bytes in .reg file notation, 'hex(<type in hex>):<bytes>', for
+example 'hex(1):31,00,00,00'. unload also deletes 'romOverrideXX' records. Nothing else in the key is touched.
 verify reads the image the driver is running (twice, through NvAPI) and compares it with 'vbios'.
 """
 from __future__ import annotations
 import hashlib
+import re
 from ..families import architecture
 from ..payload import PayloadError
-from .devices import REG_BINARY, REG_DWORD, REG_SZ, TYPE_NAMES, normalize_location, nvidia_version
+from .devices import (REG_BINARY, REG_DWORD, REG_SZ, decode, normalize_location, nvidia_version, type_name,
+                      value_text)
 from .image import extract_chain
 from .nvapi import IMAGE_SIZE
 
@@ -19,6 +23,8 @@ FIRMWARE = 'EnableGpuFirmware'
 FIRMWARE_OVERRIDE = 0x11      # GSP firmware enabled (1) | fallback allowed (0x10); the driver default is 0x12
 BACKUP = 'VixLoaderPreviousEnableGpuFirmware'
 ABSENT = 'absent'
+MAX_SAVED = 4096              # bytes of a non-DWORD EnableGpuFirmware that load saves exactly; larger is refused
+RAW_BACKUP = re.compile(r'hex\((0|[1-9a-f][0-9a-f]{0,7})\):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*)?)')
 PATCH_RECORDS = tuple(f'romOverride{i:02X}' for i in range(256))
 MIN_DRIVER = (616, 56)
 RESTART_HINT = 'Restart Windows to apply the change.'
@@ -34,15 +40,35 @@ def _dword(value):
     return value[1] if value and value[0] == REG_DWORD and isinstance(value[1], int) else None
 
 
+def _raw_backup(kind, raw):
+    """The BACKUP text for a value that is not a well-formed REG_DWORD, as a .reg file writes it."""
+    return f'hex({kind:x}):' + ','.join(f'{byte:02x}' for byte in raw)
+
+
 def _saved(backup):
-    """ABSENT or the integer saved in BACKUP; None when the value is malformed."""
+    """ABSENT, the DWORD saved in BACKUP, or the (type, bytes) of a saved non-DWORD value; None when malformed."""
     text = backup[1] if backup[0] == REG_SZ else None
+    if text is None:
+        return None
     if text == ABSENT:
         return ABSENT
+    match = RAW_BACKUP.fullmatch(text)
+    if match:
+        raw = bytes.fromhex(match.group(2).replace(',', ''))
+        return (int(match.group(1), 16), raw) if len(raw) <= MAX_SAVED else None
     try:
-        return int(text, 16)
-    except (TypeError, ValueError):
+        value = int(text, 16)
+    except ValueError:
         return None
+    return value if 0 <= value <= 0xFFFFFFFF else None
+
+
+def _backup_text(backup):
+    """BACKUP for status: as stored for absent or a DWORD, readable for an exact copy."""
+    saved = _saved(backup)
+    if isinstance(saved, tuple):
+        return f'{type_name(saved[0])} {value_text(*saved)}'
+    return backup[1] if backup[0] == REG_SZ else 'unexpected ' + type_name(backup[0])
 
 
 def select(adapters, gpu=None, pci=None, instance_id=None):
@@ -70,18 +96,17 @@ def select(adapters, gpu=None, pci=None, instance_id=None):
 
 def describe(key):
     """The override-related values of one driver key."""
-    vbios, firmware, backup = key.get(VBIOS), key.get(FIRMWARE), key.get(BACKUP)
+    vbios, firmware, backup = key.get(VBIOS), key.get_raw(FIRMWARE), key.get(BACKUP)
     stored = vbios[1] if vbios and vbios[0] == REG_BINARY else None
+    dword = None if firmware is None else _dword(decode(*firmware))
     return {
         'vbios': None if vbios is None else {
-            'type': TYPE_NAMES.get(vbios[0], str(vbios[0])),
+            'type': type_name(vbios[0]),
             'size': len(stored) if stored is not None else None,
             'sha256': hashlib.sha256(stored).hexdigest() if stored is not None else None},
         'enable_gpu_firmware': None if firmware is None else
-            (f'{_dword(firmware):#04x}' if _dword(firmware) is not None else
-             'unexpected ' + TYPE_NAMES.get(firmware[0], str(firmware[0]))),
-        'saved_previous_enable_gpu_firmware': None if backup is None else
-            (backup[1] if backup[0] == REG_SZ else 'unexpected ' + TYPE_NAMES.get(backup[0], str(backup[0]))),
+            (f'{dword:#04x}' if dword is not None else f'unexpected {type_name(firmware[0])} {value_text(*firmware)}'),
+        'saved_previous_enable_gpu_firmware': None if backup is None else _backup_text(backup),
         'rom_override_records': [name for name in PATCH_RECORDS if key.get(name) is not None],
     }
 
@@ -119,7 +144,10 @@ def _step_json(step):
     if op == 'delete':
         return {'op': 'delete', 'name': name}
     kind, value = rest
-    entry = {'op': 'set', 'name': name, 'type': TYPE_NAMES[kind]}
+    if op == 'restore':        # exact type and bytes of a saved non-DWORD value
+        return {'op': 'set', 'name': name, 'type': type_name(kind), 'value': value_text(kind, value),
+                'data': value.hex()}
+    entry = {'op': 'set', 'name': name, 'type': type_name(kind)}
     if kind == REG_BINARY:
         entry.update(size=len(value), sha256=hashlib.sha256(value).hexdigest())
     else:
@@ -132,6 +160,8 @@ def _apply(key, steps):
         for op, name, *rest in steps:
             if op == 'set':
                 key.set(name, *rest)
+            elif op == 'restore':
+                key.set_raw(name, *rest)
             else:
                 key.delete(name)
         key.flush()
@@ -174,32 +204,51 @@ def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False,
     key = platform.open_key(adapter, write=not dry_run)
     try:
         before = describe(key)
-        firmware, backup = key.get(FIRMWARE), key.get(BACKUP)
-        steps, message = [], None
+        firmware, backup = key.get_raw(FIRMWARE), key.get(BACKUP)
+        steps, notes, extra = [], [], {}
         if backup is not None:
             if _saved(backup) is None:
                 raise LoaderError(f'{BACKUP} holds an unexpected value; run unload first')
         else:
-            if firmware is not None and _dword(firmware) is None:
-                raise LoaderError(f'{FIRMWARE} holds an unexpected value; not changing it')
-            steps.append(('set', BACKUP, REG_SZ, ABSENT if firmware is None else f'{firmware[1]:#010x}'))
+            dword = None if firmware is None else _dword(decode(*firmware))
+            if firmware is None:
+                backup = (REG_SZ, ABSENT)
+            elif dword is not None:
+                backup = (REG_SZ, f'{dword:#010x}')
+            else:
+                # Set by another tool or by hand: saved byte for byte, and unload writes it back the same way.
+                kind, raw = firmware
+                if len(raw) > MAX_SAVED:
+                    raise LoaderError(f'{FIRMWARE} holds a {type_name(kind)} value of {len(raw)} bytes, too large to '
+                                      f'save (at most {MAX_SAVED}); not changing it')
+                backup = (REG_SZ, _raw_backup(kind, raw))
+                extra['raw_backup'] = {'type': type_name(kind), 'size': len(raw), 'value': value_text(kind, raw),
+                                       'backup': backup[1]}
+                shown = f'{len(raw)}-byte REG_DWORD' if kind == REG_DWORD else type_name(kind)
+                held, saved = (('holds', 'Load saves it exactly as it is and replaces it with') if dry_run else
+                               ('held', 'It was saved exactly as it was and replaced by'))
+                notes.append(f'{FIRMWARE} {held} a {shown} value (set by another tool or by hand). {saved} REG_DWORD '
+                             f'{FIRMWARE_OVERRIDE:#04x}, the value the override needs; unload puts it back.')
+            steps.append(('set', BACKUP, *backup))
             if before['vbios'] is not None or before['rom_override_records']:
-                message = (f'An override written by another tool (for example mVolt+) is replaced and will not be '
-                           f'restored; unload restores {FIRMWARE} to its current value ({before["enable_gpu_firmware"] or "not set"}).')
+                extra['replaces_other_override'] = True
+                current = (before['enable_gpu_firmware'] or 'not set').removeprefix('unexpected ')
+                notes.insert(0, 'An override written by another tool (for example mVolt+) is replaced and will not be '
+                                f'restored; unload restores {FIRMWARE} to its current value ({current}).')
         steps += [('delete', name) for name in before['rom_override_records']]
         steps += [('set', VBIOS, REG_BINARY, chain.data), ('set', FIRMWARE, REG_DWORD, FIRMWARE_OVERRIDE)]
         report = {'gpu': _adapter_info(adapter), 'dry_run': dry_run, 'before': before,
                   'payload': {'family': chain.family, 'size': len(chain.data),
                               'sha256': hashlib.sha256(chain.data).hexdigest(), 'file_size': len(data),
                               'dropped_prefix': chain.start, 'dropped_trailing': len(data) - chain.end},
-                  'steps': [_step_json(step) for step in steps]}
-        if message:
-            report['message'] = message
+                  'steps': [_step_json(step) for step in steps], **extra}
+        if notes:
+            report['message'] = ' '.join(notes)
         if dry_run:
             return report
         _apply(key, steps)
         after = key.get(VBIOS), key.get(FIRMWARE), key.get(BACKUP)
-        if after[0] != (REG_BINARY, chain.data) or after[1] != (REG_DWORD, FIRMWARE_OVERRIDE) or after[2] is None \
+        if after[0] != (REG_BINARY, chain.data) or after[1] != (REG_DWORD, FIRMWARE_OVERRIDE) or after[2] != backup \
                 or any(key.get(name) is not None for name in PATCH_RECORDS):
             raise LoaderError('the registry values read back differ from what was written; run unload')
         report['after'] = describe(key)
@@ -216,14 +265,17 @@ def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False, res
         before = describe(key)
         backup = key.get(BACKUP)
         steps, message = [], None
-        expected_firmware = key.get(FIRMWARE)
+        expected_firmware = key.get_raw(FIRMWARE)
         saved = None if backup is None else _saved(backup)
         if saved == ABSENT:
             steps.append(('delete', FIRMWARE))
             expected_firmware = None
-        elif saved is not None:
+        elif isinstance(saved, int):
             steps.append(('set', FIRMWARE, REG_DWORD, saved))
-            expected_firmware = (REG_DWORD, saved)
+            expected_firmware = (REG_DWORD, saved.to_bytes(4, 'little'))
+        elif saved is not None:
+            steps.append(('restore', FIRMWARE, *saved))
+            expected_firmware = saved
         elif backup is not None:
             message = f'{BACKUP} holds an unexpected value; {FIRMWARE} is left as it is.'
         else:
@@ -242,8 +294,14 @@ def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False, res
             report['message'] = message
         if dry_run:
             return report
-        _apply(key, steps)
-        if key.get(VBIOS) is not None or key.get(BACKUP) is not None or key.get(FIRMWARE) != expected_firmware \
+        # The saved value is deleted only after EnableGpuFirmware reads back exactly as expected.
+        _apply(key, [step for step in steps if step != ('delete', BACKUP)])
+        if key.get_raw(FIRMWARE) != expected_firmware:
+            raise LoaderError(f'{FIRMWARE} read back differs from what was expected'
+                              + (f'; {BACKUP} is kept, run unload again' if backup is not None else ''))
+        if backup is not None:
+            _apply(key, [('delete', BACKUP)])
+        if key.get(VBIOS) is not None or key.get(BACKUP) is not None \
                 or any(key.get(name) is not None for name in PATCH_RECORDS):
             raise LoaderError('the registry values read back differ from what was expected')
         report['after'] = describe(key)

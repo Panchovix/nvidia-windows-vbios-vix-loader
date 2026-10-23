@@ -6,7 +6,8 @@ A platform object provides:
 - open_key(adapter, write=False) -> key: the adapter's driver key
   (HKLM\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-...}\\NNNN), with
   get(name) -> (type, value) | None, set(name, type, value), delete(name) -> bool,
-  flush() and close();
+  get_raw(name) -> (type, bytes) | None and set_raw(name, type, bytes) for a value's exact data,
+  flush() and close(); get and set convert with decode and encode below;
 - is_admin() -> bool;
 - restart_device(instance_id) -> (exit code or None, output text);
 - vbios_image(adapter) -> bytes: the VBIOS image the driver is running (nvapi.py).
@@ -18,8 +19,48 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
-REG_SZ, REG_BINARY, REG_DWORD = 1, 3, 4
-TYPE_NAMES = {REG_SZ: 'REG_SZ', REG_BINARY: 'REG_BINARY', REG_DWORD: 'REG_DWORD'}
+REG_NONE, REG_SZ, REG_EXPAND_SZ, REG_BINARY, REG_DWORD, REG_MULTI_SZ, REG_QWORD = 0, 1, 2, 3, 4, 7, 11
+TYPE_NAMES = {REG_NONE: 'REG_NONE', REG_SZ: 'REG_SZ', REG_EXPAND_SZ: 'REG_EXPAND_SZ', REG_BINARY: 'REG_BINARY',
+              REG_DWORD: 'REG_DWORD', REG_MULTI_SZ: 'REG_MULTI_SZ', REG_QWORD: 'REG_QWORD'}
+
+
+def type_name(kind):
+    return TYPE_NAMES.get(kind, f'type {kind}')
+
+
+def decode(kind, raw):
+    """(type, value) as get() returns it: an int for a 4-byte REG_DWORD, the text up to the first NUL for
+    REG_SZ, else the bytes as stored."""
+    if kind == REG_DWORD and len(raw) == 4:
+        return REG_DWORD, int.from_bytes(raw, 'little')
+    if kind == REG_SZ:
+        return REG_SZ, raw.decode('utf-16-le', 'replace').split('\0', 1)[0]
+    return kind, bytes(raw)
+
+
+def encode(kind, value):
+    """The bytes set() writes: 4 bytes for an int REG_DWORD, NUL-terminated UTF-16 for a REG_SZ text, else the bytes."""
+    if kind == REG_DWORD and isinstance(value, int):
+        return value.to_bytes(4, 'little')
+    if kind == REG_SZ and isinstance(value, str):
+        return (value + '\0').encode('utf-16-le')
+    return bytes(value)
+
+
+def value_text(kind, raw):
+    """A short readable form of a value's exact data, for status and the planned steps."""
+    size = f'{len(raw)} byte' + ('' if len(raw) == 1 else 's')
+    if kind in (REG_DWORD, REG_QWORD) and len(raw) == (4 if kind == REG_DWORD else 8):
+        return f"{int.from_bytes(raw, 'little'):#04x}"
+    if kind in (REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ) and len(raw) % 2 == 0:
+        text = raw.decode('utf-16-le', 'replace')
+        if kind == REG_MULTI_SZ:
+            text = text[:-2] if text.endswith('\0\0') else text[:-1] if text.endswith('\0') else text
+            shown = repr(text.split('\0') if text else [])
+        else:
+            shown = repr(text[:-1] if text.endswith('\0') else text)
+        return (shown if len(shown) <= 60 else shown[:57] + '...') + f' ({size})'
+    return size + (': ' + raw[:16].hex(' ') + (' ...' if len(raw) > 16 else '') if raw else '')
 
 
 @dataclass(frozen=True)

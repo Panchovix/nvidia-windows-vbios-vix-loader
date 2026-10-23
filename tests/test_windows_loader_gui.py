@@ -12,7 +12,7 @@ import unittest
 
 from nvidia_vbios.windows_loader import controller as gui_controller, operations as ops
 from nvidia_vbios.windows_loader.controller import STRINGS, Controller, language_for, resolve_theme
-from nvidia_vbios.windows_loader.devices import REG_BINARY, REG_DWORD, REG_SZ
+from nvidia_vbios.windows_loader.devices import REG_BINARY, REG_DWORD, REG_QWORD, REG_SZ
 from nvidia_vbios.windows_loader.nvapi import NvApiError
 from test_windows_loader import RTX_5070, RTX_5070_TI, UNRELATED, FakeKey, FakePlatform, adapter, chain, platform, rom
 
@@ -140,6 +140,71 @@ class ControllerTests(unittest.TestCase):
                                               'GPU not restarted. Restart Windows to apply the change.']))
         self.assertEqual(key.values, UNRELATED)
         self.assertEqual(len(fake.restarted), 1)
+
+    def test_a_non_dword_enable_gpu_firmware_is_saved_and_put_back_in_both_languages(self):
+        texts = {
+            'en': ('EnableGpuFirmware holds a REG_QWORD value (set by another tool or by hand). Load saves it exactly '
+                   'as it is and replaces it with the DWORD value the override needs; Remove override puts it back.',
+                   'EnableGpuFirmware held a REG_QWORD value (set by another tool or by hand). It was saved exactly as '
+                   'it was and replaced by the DWORD value the override needs; Remove override puts it back.',
+                   'set EnableGpuFirmware = REG_QWORD 0x11', 'GPU 0: override removed.'),
+            'es': ('EnableGpuFirmware tiene un valor REG_QWORD (puesto por otra herramienta o a mano). Cargar lo '
+                   'guarda tal cual y lo cambia por el valor DWORD que necesita el reemplazo; Quitar reemplazo lo '
+                   'vuelve a poner.',
+                   'EnableGpuFirmware tenía un valor REG_QWORD (puesto por otra herramienta o a mano). Se guardó tal '
+                   'cual y se cambió por el valor DWORD que necesita el reemplazo; Quitar reemplazo lo vuelve a poner.',
+                   'set EnableGpuFirmware = REG_QWORD 0x11', 'GPU 0: reemplazo quitado.'),
+        }
+        qword = (0x11).to_bytes(8, 'little')
+        for language, (confirm, saved, restore, removed) in texts.items():
+            with self.subTest(language=language):
+                fake, key = platform(values={ops.FIRMWARE: (REG_QWORD, qword)})
+                c = self.controller(fake, language)
+                c.choose_file(self.file(rom(RTX_5070)))
+                self.assertTrue(c.validation_text()[0])
+                question = c.confirm_load()
+                self.assertIn(confirm, question.split('\n\n'))
+                self.assertIn('set VixLoaderPreviousEnableGpuFirmware = REG_SZ hex(b):11,00,00,00,00,00,00,00',
+                              question)
+                self.assertNotIn(STRINGS[language]['other_tool'], question)
+                ok, lines = c.run('load')
+                self.assertTrue(ok)
+                self.assertEqual(lines[1:], [saved, STRINGS[language]['restarted']])
+                self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
+                c.refresh()
+                self.assertTrue(c.rows()[0][5].startswith(STRINGS[language]['override_loaded'].split(':')[0]))
+                question, error = c.confirm_remove()
+                self.assertIsNone(error)
+                self.assertIn(restore, question)
+                ok, lines = c.run('unload')
+                self.assertEqual((ok, lines[0]), (True, removed))
+                self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_QWORD, qword))
+                self.assertEqual(set(key.values), {*UNRELATED, ops.FIRMWARE})
+
+        # With another tool's override as well, both notes are shown, that one first.
+        fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'mvolt'), ops.FIRMWARE: (REG_SZ, b'1\0')})
+        c = self.controller(fake)
+        c.choose_file(self.file(rom(RTX_5070)))
+        ok, lines = c.run('load')
+        self.assertEqual(lines[1:3], [STRINGS['en']['other_tool'],
+                                      STRINGS['en']['firmware_raw_saved'].format(type='REG_SZ')])
+        # A REG_DWORD of another size is named with its size, so the note does not contradict itself.
+        for language, note in (('en', 'EnableGpuFirmware holds a 2-byte REG_DWORD value (set by another tool or by '
+                                      'hand).'),
+                                ('es', 'EnableGpuFirmware tiene un valor REG_DWORD de 2 bytes (puesto por otra '
+                                       'herramienta o a mano).')):
+            fake, key = platform(values={ops.FIRMWARE: (REG_DWORD, b'\x11\0')})
+            c = self.controller(fake, language)
+            c.choose_file(self.file(rom(RTX_5070)))
+            self.assertIn(note, c.confirm_load())
+        # A value too large to save is refused before anything is written.
+        fake, key = platform(values={ops.FIRMWARE: (REG_BINARY, bytes(5000))})
+        c = self.controller(fake)
+        c.choose_file(self.file(rom(RTX_5070)))
+        self.assertEqual(c.validation_text(), (False, 'Refused: EnableGpuFirmware holds a REG_BINARY value of 5000 '
+                                                      'bytes, too large to save (at most 4096); not changing it'))
+        self.assertIsNone(c.confirm_load())
+        self.assertEqual(key.calls, [])
 
     def test_worker_errors_are_reported_not_raised(self):
         fake, key = platform(restart=(None, 'timed out'))

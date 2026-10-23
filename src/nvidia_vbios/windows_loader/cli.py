@@ -80,6 +80,8 @@ def _human_status(report):
 def step_text(step):
     """One registry change of a report, for example 'set EnableGpuFirmware = REG_DWORD 0x11'."""
     detail = (f"{step['size']} bytes, sha256 {step['sha256']}" if 'size' in step else step.get('value', ''))
+    if len(detail) > 100:      # a long saved value; --json keeps all of it
+        detail = f'{detail[:80]}... ({len(detail)} characters)'
     return f"{step['op']} {step['name']}" + (f" = {step['type']} {detail}" if step['op'] == 'set' else '')
 
 

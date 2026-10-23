@@ -55,6 +55,13 @@ STRINGS = {
                           'Registry changes in the GPU\'s driver key:\n{steps}',
         'other_tool': 'This GPU has an override written by another tool (for example mVolt+). It is replaced and '
                       'will not be restored.',
+        'firmware_raw_confirm': 'EnableGpuFirmware holds a {type} value (set by another tool or by hand). Load saves '
+                                'it exactly as it is and replaces it with the DWORD value the override needs; Remove '
+                                'override puts it back.',
+        'firmware_raw_saved': 'EnableGpuFirmware held a {type} value (set by another tool or by hand). It was saved '
+                              'exactly as it was and replaced by the DWORD value the override needs; Remove override '
+                              'puts it back.',
+        'dword_size': '{size}-byte REG_DWORD',
         'will_restart': 'The GPU is restarted afterwards; the screens on it can go black for a few seconds. If '
                         'they stay black, restart Windows: the override stays stored.',
         'no_restart': 'The GPU is not restarted: restart Windows to apply the change.',
@@ -137,6 +144,13 @@ STRINGS = {
                           'Cambios en la clave de registro del driver de la GPU:\n{steps}',
         'other_tool': 'Esta GPU tiene un reemplazo escrito por otra herramienta (por ejemplo mVolt+). Se reemplaza '
                       'y no se va a restaurar.',
+        'firmware_raw_confirm': 'EnableGpuFirmware tiene un valor {type} (puesto por otra herramienta o a mano). '
+                                'Cargar lo guarda tal cual y lo cambia por el valor DWORD que necesita el reemplazo; '
+                                'Quitar reemplazo lo vuelve a poner.',
+        'firmware_raw_saved': 'EnableGpuFirmware tenía un valor {type} (puesto por otra herramienta o a mano). Se '
+                              'guardó tal cual y se cambió por el valor DWORD que necesita el reemplazo; Quitar '
+                              'reemplazo lo vuelve a poner.',
+        'dword_size': 'REG_DWORD de {size} bytes',
         'will_restart': 'Después se reinicia la GPU; las pantallas conectadas a ella pueden quedar en negro unos '
                         'segundos. Si siguen en negro, reinicia Windows: el reemplazo queda guardado.',
         'no_restart': 'La GPU no se reinicia: reinicia Windows para aplicar el cambio.',
@@ -358,6 +372,15 @@ class Controller:
     def _restart_note(self):
         return self.text['will_restart'] if self.restart else self.text['no_restart']
 
+    def _load_notes(self, report, firmware_key):
+        """The window's own texts for the notes of a load report."""
+        notes = [self.text['other_tool']] if report.get('replaces_other_override') else []
+        raw = report.get('raw_backup')
+        if raw:
+            kind = self.text['dword_size'].format(size=raw['size']) if raw['type'] == 'REG_DWORD' else raw['type']
+            notes.append(self.text[firmware_key].format(type=kind))
+        return notes
+
     def _steps(self, report):
         return '\n'.join('  ' + step_text(step) for step in report['steps'])
 
@@ -372,8 +395,7 @@ class Controller:
         parts = [t['confirm_load'].format(index=gpu['index'], name=gpu['name'], location=gpu['location'] or '?',
                                           path=self.path, size=payload['size'], family=payload['family'],
                                           sha256=payload['sha256'], steps=self._steps(report))]
-        if report.get('message'):
-            parts.append(t['other_tool'])
+        parts += self._load_notes(report, 'firmware_raw_confirm')
         parts += [self._restart_note(), t['risk']]
         return '\n\n'.join(parts)
 
@@ -414,8 +436,7 @@ class Controller:
         if action == 'load':
             payload = report['payload']
             lines.append(t['loaded'].format(index=index, size=payload['size'], sha256=payload['sha256']))
-            if report.get('message'):
-                lines.append(t['other_tool'])
+            lines += self._load_notes(report, 'firmware_raw_saved')
         else:
             if report['steps']:
                 lines.append(t['removed'].format(index=index))

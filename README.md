@@ -54,15 +54,19 @@ returns the key to its state before the first `load`, except that an override wr
 
 ## Antivirus warnings
 
-Some antivirus programs and online scanners flag the two exes (like as generic or "ML" detections, "Python DLL
-sideloading", among others). These are false positives: each exe is a Python program packed with Nuitka `--onefile`, which
-unpacks the Python runtime into a temporary folder when it starts, and the exes are not code-signed. The loader
-does not use the network. The exes are built by GitHub Actions from this repository (see [Tests](#tests));
-compare the download with `SHA256SUMS` to confirm that it matches the published asset.
-I've also shared the binaries to Microsoft so these aren't marked anymore.
-Even then, if you don't want to the executable supplied in releases, you can build the binary yourself via cloning the repo and following the
-instructions that are shown on the README.
-And lastly, if you don't want to use this loader for custom VBIOS, you can use mVolt+ (https://github.com/b00nz/mVolt) via BIOS override, but issues related to mVolt go there, not this repo. Take in mind BIOS override works mostly on Blackwell there.
+Some antivirus programs and online scanners flag the two exes (for example generic or "ML" detections, or
+"Python DLL sideloading"). These are false positives: each exe is a Python program packed with Nuitka
+`--onefile`, which unpacks the Python runtime into a temporary folder when it starts, and the exes are not
+code-signed. The loader does not use the network. The exes are built by GitHub Actions from this repository
+(see [Tests](#tests)); compare the download with `SHA256SUMS` to confirm that it matches the published asset.
+
+I've also submitted the binaries to Microsoft so they stop being flagged. If you still don't want to run the
+exes from the releases, clone the repository and run the loader from source (see the end of [Usage](#usage)),
+or build the exes yourself the same way the workflow does (see [Tests](#tests)).
+
+And lastly, if you don't want to use this loader for an edited VBIOS, you can use the BIOS override of mVolt+
+(https://github.com/b00nz/mVolt) instead. Issues related to mVolt+ go there, not to this repo. Keep in mind
+that its BIOS override works mostly on Blackwell.
 
 ## Status
 

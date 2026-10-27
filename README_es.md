@@ -56,6 +56,22 @@ potencia. `unload` deja la clave como estaba antes del primer `load`, salvo que 
 herramienta (el `vbios` o los registros `romOverride` de mVolt+) no se restaura; en ese caso `load` lo avisa
 y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
 
+## Avisos del antivirus
+
+Algunos antivirus y analizadores en línea marcan los dos exe (por ejemplo detecciones genéricas o "ML", o
+"Python DLL sideloading"). Son falsos positivos: cada exe es un programa en Python empaquetado con Nuitka
+`--onefile`, que al arrancar descomprime el runtime de Python en una carpeta temporal, y los exe no están
+firmados. El loader no usa la red. Los compila GitHub Actions desde este repositorio (ver [Pruebas](#pruebas));
+compara la descarga con `SHA256SUMS` para confirmar que coincide con el archivo publicado.
+
+También envié los binarios a Microsoft para que dejen de marcarlos. Si aun así no quieres ejecutar los exe de
+los releases, clona el repositorio y usa el loader desde el código fuente (ver el final de [Uso](#uso)), o
+compila los exe tú mismo igual que el workflow (ver [Pruebas](#pruebas)).
+
+Por último, si no quieres usar este loader para una VBIOS editada, puedes usar el reemplazo de BIOS de mVolt+
+(https://github.com/b00nz/mVolt). Los problemas de mVolt+ se reportan allá, no en este repositorio. Ten en
+cuenta que su reemplazo de BIOS funciona sobre todo en Blackwell.
+
 ## Estado
 
 | Familia | Estado |
@@ -163,15 +179,6 @@ falta.
 Desde el código fuente, con Python 3.11 o más nuevo: `pip install .` y luego `vbios-loader status` o
 `vbios-loader-gui`, o `python -m nvidia_vbios.windows_loader status` /
 `python -m nvidia_vbios.windows_loader.gui` con `src` en `PYTHONPATH`.
-
-### Avisos del antivirus
-
-Algunos antivirus y analizadores en línea marcan los dos exe (detecciones genéricas o "ML", "Python DLL
-sideloading"). Son falsos positivos: cada exe es un programa en Python empaquetado con Nuitka `--onefile`, que
-al arrancar descomprime el runtime de Python en una carpeta temporal, y los exe no están firmados. El loader no
-usa la red. Los compila GitHub Actions desde este repositorio (ver [Pruebas](#pruebas)); compara la descarga con
-`SHA256SUMS` para confirmar que coincide con el archivo publicado. Si prefieres no ejecutarlos, usa el loader
-desde el código fuente como se indica arriba.
 
 ## Verificar
 

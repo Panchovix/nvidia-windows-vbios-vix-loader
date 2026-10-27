@@ -52,6 +52,18 @@ returns the key to its state before the first `load`, except that an override wr
 (mVolt+ `vbios` or `romOverride` records) is not restored; in that case `load` says so, and `unload` leaves
 `EnableGpuFirmware` as that tool set it.
 
+## Antivirus warnings
+
+Some antivirus programs and online scanners flag the two exes (like as generic or "ML" detections, "Python DLL
+sideloading", among others). These are false positives: each exe is a Python program packed with Nuitka `--onefile`, which
+unpacks the Python runtime into a temporary folder when it starts, and the exes are not code-signed. The loader
+does not use the network. The exes are built by GitHub Actions from this repository (see [Tests](#tests));
+compare the download with `SHA256SUMS` to confirm that it matches the published asset.
+I've also shared the binaries to Microsoft so these aren't marked anymore.
+Even then, if you don't want to the executable supplied in releases, you can build the binary yourself via cloning the repo and following the
+instructions that are shown on the README.
+And lastly, if you don't want to use this loader for custom VBIOS, you can use mVolt+ (https://github.com/b00nz/mVolt) via BIOS override, but issues related to mVolt go there, not this repo.
+
 ## Status
 
 | GPU family | State |
@@ -153,15 +165,6 @@ start. A clean driver installation or a driver update can recreate the driver ke
 From source, with Python 3.11 or newer: `pip install .` then `vbios-loader status` or `vbios-loader-gui`, or
 `python -m nvidia_vbios.windows_loader status` / `python -m nvidia_vbios.windows_loader.gui` with `src` on
 `PYTHONPATH`.
-
-### Antivirus warnings
-
-Some antivirus programs and online scanners flag the two exes (generic or "ML" detections, "Python DLL
-sideloading"). These are false positives: each exe is a Python program packed with Nuitka `--onefile`, which
-unpacks the Python runtime into a temporary folder when it starts, and the exes are not code-signed. The loader
-does not use the network. The exes are built by GitHub Actions from this repository (see [Tests](#tests));
-compare the download with `SHA256SUMS` to confirm that it matches the published asset. If you prefer not to run
-them, run the loader from source as shown above.
 
 ## Verify
 

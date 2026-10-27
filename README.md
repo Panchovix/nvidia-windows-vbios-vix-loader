@@ -62,7 +62,7 @@ compare the download with `SHA256SUMS` to confirm that it matches the published 
 I've also shared the binaries to Microsoft so these aren't marked anymore.
 Even then, if you don't want to the executable supplied in releases, you can build the binary yourself via cloning the repo and following the
 instructions that are shown on the README.
-And lastly, if you don't want to use this loader for custom VBIOS, you can use mVolt+ (https://github.com/b00nz/mVolt) via BIOS override, but issues related to mVolt go there, not this repo.
+And lastly, if you don't want to use this loader for custom VBIOS, you can use mVolt+ (https://github.com/b00nz/mVolt) via BIOS override, but issues related to mVolt go there, not this repo. Take in mind BIOS override works mostly on Blackwell there.
 
 ## Status
 

@@ -28,7 +28,7 @@ jobs:
           python-version: '3.12.10'
       - name: Tag matches the version
         if: startsWith(github.ref, 'refs/tags/v')
-        run: if ("${{ github.ref_name }}" -ne "v0.4.0") { throw "tag ${{ github.ref_name }} is not v0.4.0" }
+        run: if ("${{ github.ref_name }}" -ne "v0.4.1") { throw "tag ${{ github.ref_name }} is not v0.4.1" }
       - name: Unit tests
         run: python -m unittest discover -s tests -v
       - name: Install Nuitka
@@ -42,7 +42,7 @@ jobs:
           --nofollow-import-to=nvidia_vbios.windows_loader.gui --nofollow-import-to=tkinter
           --product-name="Windows VBIOS Vix Loader" --company-name="Vix Loader authors"
           --file-description="Windows VBIOS Vix Loader" --copyright="Copyright (c) 2026 panchovix"
-          --file-version=0.4.0 --product-version=0.4.0
+          --file-version=0.4.1 --product-version=0.4.1
           --output-dir=build --output-filename=vbios-loader.exe tools/entry.py
       - name: Build vbios-loader-gui.exe
         run: >-
@@ -53,7 +53,7 @@ jobs:
           --include-package=nvidia_vbios.windows_loader
           --product-name="Windows VBIOS Vix Loader" --company-name="Vix Loader authors"
           --file-description="Windows VBIOS Vix Loader (window)" --copyright="Copyright (c) 2026 panchovix"
-          --file-version=0.4.0 --product-version=0.4.0
+          --file-version=0.4.1 --product-version=0.4.1
           --output-dir=build --output-filename=vbios-loader-gui.exe tools/entry_gui.py
       - name: Smoke test (no NVIDIA GPU on the runner)
         run: |

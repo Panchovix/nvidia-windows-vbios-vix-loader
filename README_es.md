@@ -45,9 +45,12 @@ del driver. En Windows el driver no usa ese modo por defecto en las tarjetas GeF
 trabajo (incluidas las RTX 50), y en una RTX 4070 hacía que el driver de pantalla se reiniciara cada vez que se
 abría Apple Music, incluso sin un reemplazo. En su modo predeterminado, el driver lee el reemplazo por sí mismo.
 
-Reinicia Windows para aplicar el cambio, con **Reiniciar**, no Apagar: después de apagar, el inicio rápido de
-Windows retoma el estado anterior del driver. El driver mantiene la imagen hasta que Windows se reinicia, así
-que reiniciar solo la GPU no basta para aplicar ni quitar un reemplazo.
+Reinicia Windows para aplicar el cambio. El driver mantiene la imagen hasta que Windows se reinicia, así que
+reiniciar solo la GPU no basta para aplicar ni quitar un reemplazo. Apagar y volver a encender el PC también
+sirve si el inicio rápido de Windows está desactivado. Con el inicio rápido activado (viene así por defecto en
+muchos PCs), apagar deja el driver en uso guardado en el archivo de hibernación y el siguiente encendido lo
+retoma, así que el cambio espera al siguiente reinicio. En ningún caso se pierde nada, y no hay que volver a
+cargar ni quitar nada.
 
 mVolt+ guarda su archivo de BIOS en el mismo valor `vbios` (y pone `EnableGpuFirmware` en `0x11`), así que una
 BIOS cargada con mVolt+ en la misma GPU queda reemplazada. Si `EnableGpuFirmware` ya estaba en `0x11` antes del
@@ -70,7 +73,7 @@ y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
 ## Actualizar desde la 0.3.2 o anterior
 
 Las versiones hasta la 0.3.2 ponían `EnableGpuFirmware` en `0x11` en cada GPU con un reemplazo, lo que deja esas
-GPUs en modo de firmware GSP. Vuelve a cargar el mismo archivo con la 0.4.0 (esta versión restaura el valor
+GPUs en modo de firmware GSP. Vuelve a cargar el mismo archivo con la 0.4.0 o más nueva (restaura el valor
 guardado), o quita el reemplazo, y reinicia Windows. `status`, y el área de **Mensajes** de la ventana, muestran
 las GPUs que siguen con el modo de firmware GSP activado por una versión anterior.
 
@@ -92,14 +95,15 @@ cuenta que su reemplazo de BIOS funciona sobre todo en Blackwell.
 
 ## Estado
 
-El modo predeterminado del driver, el estado que deja la 0.4.0 (`vbios` guardado y `EnableGpuFirmware` sin
-valor o en su valor predeterminado `0x12`), se probó con el driver 621.01 en una RTX 4090, una RTX 5070 y una
-RTX A2000 (la A2000 es la que da imagen): después de reiniciar Windows, Verificar confirmó el reemplazo en las
-tres, y los límites de potencia editados (máximos más altos y mínimos más bajos) se aplicaron y se mantuvieron
-bajo carga. En la A2000, Apple Music se abrió y funcionó sin que el driver se reiniciara. Turing, los portátiles y los drivers distintos de 621.01 todavía no están probados en el modo predeterminado. Si
-una GPU no arranca en el modo predeterminado, quita el reemplazo en Modo seguro (ver
-[Si la GPU no arranca](#si-la-gpu-no-arranca)) y abre un issue; la versión 0.3.2, que activa el modo de firmware
-GSP, sigue disponible.
+El modo predeterminado del driver, el estado que dejan la 0.4.0 y las más nuevas (`vbios` guardado y
+`EnableGpuFirmware` sin valor o en su valor predeterminado `0x12`), se probó con el driver 621.01 en una RTX
+4090, una RTX 5070 y una RTX A2000 (la A2000 es la que da imagen): después de reiniciar Windows, Verificar
+confirmó el reemplazo en las tres, y los límites de potencia editados (máximos más altos y mínimos más bajos)
+se aplicaron y se mantuvieron bajo carga. En la A2000, Apple Music se abrió y funcionó sin que el driver se
+reiniciara. Turing, los portátiles y los drivers distintos de 621.01 todavía no están probados en el modo
+predeterminado. Si una GPU no arranca en el modo predeterminado, quita el reemplazo en Modo seguro (ver [Si la
+GPU no arranca](#si-la-gpu-no-arranca)) y abre un issue; la versión 0.3.2, que activa el modo de firmware GSP,
+sigue disponible.
 
 Resultados anteriores, con versiones hasta la 0.3.2 (modo de firmware GSP):
 
@@ -154,7 +158,7 @@ comandos.
 4. Haz clic en **Archivo VBIOS...** y elige el archivo. La ventana lo revisa de inmediato para la GPU elegida y
    muestra si es válido (familia, bytes a guardar, sha256) o por qué se rechaza.
 5. Haz clic en **Cargar** (lo mismo que `load`), lee la confirmación (GPU, archivo, cambios en el registro)
-   y acepta. Luego reinicia Windows (**Reiniciar**, no Apagar) para aplicar el reemplazo.
+   y acepta. Luego reinicia Windows para aplicar el reemplazo.
 6. Después de reiniciar, haz clic en **Verificar** para comprobar que el driver está usando la VBIOS cargada
    (lo mismo que `verify`, ver [Verificar](#verificar)).
 7. Para volver a la VBIOS propia de la tarjeta, elige la GPU, haz clic en **Quitar reemplazo** (lo mismo que

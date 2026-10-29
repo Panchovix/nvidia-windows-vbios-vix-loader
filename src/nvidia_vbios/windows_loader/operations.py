@@ -32,7 +32,8 @@ MAX_SAVED = 4096              # bytes of a non-DWORD EnableGpuFirmware that load
 RAW_BACKUP = re.compile(r'hex\((0|[1-9a-f][0-9a-f]{0,7})\):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*)?)')
 PATCH_RECORDS = tuple(f'romOverride{i:02X}' for i in range(256))
 MIN_DRIVER = (616, 56)
-RESTART_HINT = 'Restart Windows to apply the change (Restart, not Shut down).'
+RESTART_HINT = ('Restart Windows to apply the change. Shutting down works too when Windows Fast Startup is off. '
+                'With it on, the change waits for the next restart, and nothing has to be repeated.')
 VERIFY_OK = ('override-active', 'no-override')    # the driver runs what the registry says
 
 

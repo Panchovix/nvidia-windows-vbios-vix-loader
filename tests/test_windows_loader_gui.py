@@ -104,6 +104,8 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(c.gpu['index'], 0)
 
     def test_confirmation_texts(self):
+        applies = ('The change applies when you restart Windows. Shutting down works too when Windows Fast Startup '
+                   'is off. With it on, the change waits for the next restart, and nothing has to be repeated.')
         fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'mvolt'), ops.FIRMWARE: (REG_DWORD, 0x11)})
         c = self.controller(fake)
         path = self.file(rom(RTX_5070))
@@ -112,7 +114,7 @@ class ControllerTests(unittest.TestCase):
         for part in ('GPU 0 (GPU 0, PCI 01:00.0)', f'File: {path}', f'Stored: {len(chain(RTX_5070))} bytes',
                      'set vbios = REG_BINARY', 'set VixLoaderPreviousEnableGpuFirmware = REG_SZ 0x00000011',
                      'another tool', STRINGS['en']['firmware_gsp_kept'],
-                     'The change applies when you restart Windows (Restart, not Shut down).',
+                     applies,
                      'If the GPU does not start'):
             self.assertIn(part, text)
         self.assertNotIn('set EnableGpuFirmware', text)
@@ -120,25 +122,26 @@ class ControllerTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertIn('delete vbios', question)
         self.assertIn('Note: EnableGpuFirmware was not saved by this tool', question)
-        self.assertTrue(question.endswith('\n\nThe change applies when you restart Windows (Restart, not Shut down).'))
+        self.assertTrue(question.endswith('\n\n' + applies))
         self.assertEqual(key.calls, [])
 
     def test_load_and_remove_results(self):
+        restart = ('Restart Windows to apply the change. Shutting down works too when Windows Fast Startup is off. '
+                   'With it on, the change waits for the next restart, and nothing has to be repeated.')
         fake, key = platform()
         c = self.controller(fake)
         self.assertFalse(hasattr(c, 'restart'))         # no "restart the GPU" choice any more
         c.choose_file(self.file(rom(RTX_5070)))
         ok, lines = c.run('load')
         self.assertTrue(ok)
-        self.assertEqual(lines[1:], ['Restart Windows to apply the change (Restart, not Shut down).'])
+        self.assertEqual(lines[1:], [restart])
         self.assertTrue(lines[0].startswith(f'GPU 0: VBIOS loaded, {len(chain(RTX_5070))} bytes'))
         self.assertEqual(key.values[ops.VBIOS], (REG_BINARY, chain(RTX_5070)))
         c.refresh()
         self.assertTrue(c.can_remove())
         self.assertTrue(c.rows()[0][5].startswith('loaded: '))
         ok, lines = c.run('unload')
-        self.assertEqual((ok, lines), (True, ['GPU 0: override removed.',
-                                              'Restart Windows to apply the change (Restart, not Shut down).']))
+        self.assertEqual((ok, lines), (True, ['GPU 0: override removed.', restart]))
         self.assertEqual(key.values, UNRELATED)
 
     def test_a_non_dword_enable_gpu_firmware_is_saved_and_put_back_in_both_languages(self):

@@ -43,9 +43,11 @@ Windows the driver does not use that mode by default for GeForce and RTX worksta
 and on an RTX 4070 it made the display driver reset every time Apple Music started, even without an override.
 In its default mode the driver reads the override itself.
 
-Restart Windows to apply the change, with **Restart**, not Shut down: after a shutdown, Fast Startup resumes
-the old driver state. The driver keeps the image until Windows restarts, so restarting only the GPU is not
-enough to apply or remove an override.
+Restart Windows to apply the change. The driver keeps the image until Windows restarts, so restarting only the
+GPU is not enough to apply or remove an override. Shutting down and turning the PC back on works too when
+Windows Fast Startup is off. With Fast Startup on (the default on many PCs), a shutdown keeps the running
+driver in the hibernation file and the next start resumes it, so the change waits for the next restart.
+Nothing is lost either way, and nothing has to be loaded or removed again.
 
 mVolt+ stores its BIOS file in the same `vbios` value (and sets `EnableGpuFirmware` to `0x11`), so a BIOS
 loaded with mVolt+ on the same GPU is replaced. If `EnableGpuFirmware` was already `0x11` before the first
@@ -68,9 +70,9 @@ returns the key to its state before the first `load`, except that an override wr
 ## Upgrading from 0.3.2 or older
 
 Versions up to 0.3.2 set `EnableGpuFirmware` to `0x11` on every GPU with an override, which keeps those GPUs in
-GSP firmware mode. Load the same file again with 0.4.0 (it puts the saved value back), or remove the override,
-and restart Windows. `status`, and the **Messages** area of the window, show the GPUs that still have GSP
-firmware mode on from an older version.
+GSP firmware mode. Load the same file again with 0.4.0 or newer (it puts the saved value back), or remove the
+override, and restart Windows. `status`, and the **Messages** area of the window, show the GPUs that still have
+GSP firmware mode on from an older version.
 
 ## Antivirus warnings
 
@@ -90,8 +92,8 @@ that its BIOS override works mostly on Blackwell.
 
 ## Status
 
-The driver's default mode, the state 0.4.0 leaves (`vbios` stored, `EnableGpuFirmware` absent or at its default
-`0x12`), was tested with driver 621.01 on an RTX 4090, an RTX 5070 and an RTX A2000 (the A2000 drives the
+The driver's default mode, the state 0.4.0 and newer leave (`vbios` stored, `EnableGpuFirmware` absent or at its
+default `0x12`), was tested with driver 621.01 on an RTX 4090, an RTX 5070 and an RTX A2000 (the A2000 drives the
 display): after a Windows restart, Verify confirmed the override on all three, and the edited power limits
 (raised maximums and lowered minimums) applied and held under load. On the A2000, Apple Music opened and ran
 without a driver reset. Turing GPUs, laptops and drivers other than 621.01 are not tested in the default mode
@@ -149,7 +151,7 @@ it: load that file. The commands below do the same from the command line.
 4. Click **VBIOS file...** and choose the file. The window checks it for the selected GPU right away and
    shows either OK (family, bytes to store, sha256) or why it is refused.
 5. Click **Load** (the same as `load`), read the confirmation (GPU, file, registry changes) and accept. Then
-   restart Windows (**Restart**, not Shut down) to apply the override.
+   restart Windows to apply the override.
 6. After the restart, click **Verify** to check that the driver is running the loaded VBIOS (the same as
    `verify`, see [Verify](#verify)).
 7. To go back to the card's own VBIOS, select the GPU, click **Remove override** (the same as `unload`) and

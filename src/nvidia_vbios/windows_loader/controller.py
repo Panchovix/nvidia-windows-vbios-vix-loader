@@ -63,12 +63,15 @@ STRINGS = {
                              'restart Windows.',
         'gsp_old_loader': 'GPU {index}: GSP firmware mode is on (set by loader 0.3.2 or older). Load the VBIOS file '
                           'again with this version (or remove the override) and restart Windows.',
-        'applies_on_restart': 'The change applies when you restart Windows (Restart, not Shut down).',
+        'applies_on_restart': 'The change applies when you restart Windows. Shutting down works too when Windows Fast '
+                              'Startup is off. With it on, the change waits for the next restart, and nothing has to '
+                              'be repeated.',
         'risk': 'A modified VBIOS can damage hardware. If the GPU does not start, see "If the GPU does not start" '
                 'in the README: boot into Safe Mode and remove the override.',
         'loaded': 'GPU {index}: VBIOS loaded, {size} bytes, sha256 {sha256}.',
         'removed': 'GPU {index}: override removed.',
-        'restart_windows': 'Restart Windows to apply the change (Restart, not Shut down).',
+        'restart_windows': 'Restart Windows to apply the change. Shutting down works too when Windows Fast Startup is '
+                           'off. With it on, the change waits for the next restart, and nothing has to be repeated.',
         'verify_override-active': 'GPU {index}: the driver is using the loaded override (verified byte by byte).',
         'verify_override-active-prefix': 'GPU {index}: the first {compared} bytes the driver is running match the '
                                          'loaded override; the rest cannot be read back.',
@@ -147,12 +150,16 @@ STRINGS = {
         'gsp_old_loader': 'GPU {index}: el modo de firmware GSP está activado (lo activó el loader 0.3.2 o anterior). '
                           'Vuelve a cargar el archivo VBIOS con esta versión (o quita el reemplazo) y reinicia '
                           'Windows.',
-        'applies_on_restart': 'El cambio se aplica cuando reinicies Windows (Reiniciar, no Apagar).',
+        'applies_on_restart': 'El cambio se aplica cuando reinicies Windows. Apagar también sirve si el inicio rápido '
+                              'de Windows está desactivado. Si está activado, el cambio espera al siguiente reinicio, '
+                              'y no hay que repetir nada.',
         'risk': 'Una VBIOS modificada puede dañar el hardware. Si la GPU no arranca, revisa "Si la GPU no arranca" '
                 'en el README: arranca en Modo seguro y quita el reemplazo.',
         'loaded': 'GPU {index}: VBIOS cargada, {size} bytes, sha256 {sha256}.',
         'removed': 'GPU {index}: reemplazo quitado.',
-        'restart_windows': 'Reinicia Windows para aplicar el cambio (Reiniciar, no Apagar).',
+        'restart_windows': 'Reinicia Windows para aplicar el cambio. Apagar también sirve si el inicio rápido de '
+                           'Windows está desactivado. Si está activado, el cambio espera al siguiente reinicio, y no '
+                           'hay que repetir nada.',
         'verify_override-active': 'GPU {index}: el driver está usando el reemplazo cargado (verificado byte a byte).',
         'verify_override-active-prefix': 'GPU {index}: los primeros {compared} bytes de la VBIOS en uso coinciden con '
                                          'el reemplazo cargado; el resto no se puede leer.',

@@ -342,7 +342,9 @@ class LoadUnloadTests(unittest.TestCase):
     def test_load_and_unload_ask_for_a_windows_restart_and_restart_nothing(self):
         import nvidia_vbios.windows_loader.win32 as win32  # importable without its DLLs
         self.assertFalse(hasattr(win32.Win32Platform, 'restart_device'))      # no pnputil
-        self.assertEqual(ops.RESTART_HINT, 'Restart Windows to apply the change (Restart, not Shut down).')
+        self.assertEqual(ops.RESTART_HINT, 'Restart Windows to apply the change. Shutting down works too when Windows '
+                                           'Fast Startup is off. With it on, the change waits for the next restart, '
+                                           'and nothing has to be repeated.')
         fake, _ = platform()
         self.assertNotIn('next_step', ops.load(fake, rom(RTX_5070), dry_run=True))
         for report in (ops.load(fake, rom(RTX_5070)), ops.unload(fake, dry_run=True), ops.unload(fake)):
@@ -742,7 +744,8 @@ class CliTests(unittest.TestCase):
 
     def test_load_and_unload_commands(self):
         fake, key = platform()
-        hint = '\nRestart Windows to apply the change (Restart, not Shut down).\n'
+        hint = ('\nRestart Windows to apply the change. Shutting down works too when Windows Fast Startup is off. '
+                'With it on, the change waits for the next restart, and nothing has to be repeated.\n')
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'edited.rom'
             path.write_bytes(rom(RTX_5070))

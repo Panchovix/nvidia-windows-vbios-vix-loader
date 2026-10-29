@@ -1,11 +1,14 @@
 """status, load, unload and verify on a device platform (devices.py). Pure logic: no Windows calls of its own.
 
-load stores the chain in the adapter's driver key, the same values the NVIDIA driver reads for
-a VBIOS override: 'vbios' (REG_BINARY), 'EnableGpuFirmware' = 0x11, and no 'romOverrideXX'
-records. The previous EnableGpuFirmware value (or its absence) is saved once in BACKUP so that
-unload can restore it: 'absent', '0x%08x' for a REG_DWORD, or for any other type (or a DWORD of
-another size) its exact type and bytes in .reg file notation, 'hex(<type in hex>):<bytes>', for
-example 'hex(1):31,00,00,00'. unload also deletes 'romOverrideXX' records. Nothing else in the key is touched.
+load stores the chain in the adapter's driver key, where the NVIDIA driver reads a VBIOS override:
+'vbios' (REG_BINARY), and no 'romOverrideXX' records. 'EnableGpuFirmware' is left as it is: in the
+driver's default mode (the value absent or 0x12) the driver reads 'vbios' itself. Its value before
+the first load (or its absence) is saved once in BACKUP so that unload can restore it: 'absent',
+'0x%08x' for a REG_DWORD, or for any other type (or a DWORD of another size) its exact type and bytes
+in .reg file notation, 'hex(<type in hex>):<bytes>', for example 'hex(1):31,00,00,00'. Loader 0.3.x
+also set EnableGpuFirmware = 0x11, which turns on the driver's GSP firmware mode; load puts the saved
+value back in that case. unload also deletes 'romOverrideXX' records. Nothing else in the key is touched.
+The driver keeps the image it loaded until Windows restarts, so a load or unload applies after a Windows restart.
 verify reads the image the driver is running (twice, through NvAPI) and compares it with 'vbios'.
 """
 from __future__ import annotations
@@ -20,14 +23,16 @@ from .nvapi import IMAGE_SIZE
 
 VBIOS = 'vbios'
 FIRMWARE = 'EnableGpuFirmware'
-FIRMWARE_OVERRIDE = 0x11      # GSP firmware enabled (1) | fallback allowed (0x10); the driver default is 0x12
+# The value loader 0.3.x wrote: GSP firmware enabled (1) | fallback allowed (0x10). The driver default is 0x12.
+FIRMWARE_OVERRIDE = 0x11
+OLD_FIRMWARE = (REG_DWORD, FIRMWARE_OVERRIDE.to_bytes(4, 'little'))     # as get_raw returns it
 BACKUP = 'VixLoaderPreviousEnableGpuFirmware'
 ABSENT = 'absent'
 MAX_SAVED = 4096              # bytes of a non-DWORD EnableGpuFirmware that load saves exactly; larger is refused
 RAW_BACKUP = re.compile(r'hex\((0|[1-9a-f][0-9a-f]{0,7})\):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*)?)')
 PATCH_RECORDS = tuple(f'romOverride{i:02X}' for i in range(256))
 MIN_DRIVER = (616, 56)
-RESTART_HINT = 'Restart Windows to apply the change.'
+RESTART_HINT = 'Restart Windows to apply the change (Restart, not Shut down).'
 VERIFY_OK = ('override-active', 'no-override')    # the driver runs what the registry says
 
 
@@ -71,6 +76,26 @@ def _backup_text(backup):
     return backup[1] if backup[0] == REG_SZ else 'unexpected ' + type_name(backup[0])
 
 
+def _put_back(saved):
+    """The step that writes a saved EnableGpuFirmware back (deletes it when it was absent), and the
+    (type, bytes) that EnableGpuFirmware reads back as afterwards (None: deleted)."""
+    if saved == ABSENT:
+        return ('delete', FIRMWARE), None
+    if isinstance(saved, int):
+        return ('set', FIRMWARE, REG_DWORD, saved), (REG_DWORD, saved.to_bytes(4, 'little'))
+    return ('restore', FIRMWARE, *saved), saved
+
+
+def _set_by_old_loader(firmware, backup):
+    """_put_back of the saved value when EnableGpuFirmware is still the 0x11 that loader 0.3.x wrote over another
+    value; None otherwise (no or a malformed BACKUP, 0x11 saved, or EnableGpuFirmware changed since)."""
+    saved = None if backup is None else _saved(backup)
+    if saved is None or firmware != OLD_FIRMWARE:
+        return None
+    step, restored = _put_back(saved)
+    return None if restored == OLD_FIRMWARE else (step, restored)
+
+
 def select(adapters, gpu=None, pci=None, instance_id=None):
     """One adapter by status index, PCI location or device instance id; without any, the only NVIDIA adapter."""
     if sum(x is not None for x in (gpu, pci, instance_id)) > 1:
@@ -107,6 +132,7 @@ def describe(key):
         'enable_gpu_firmware': None if firmware is None else
             (f'{dword:#04x}' if dword is not None else f'unexpected {type_name(firmware[0])} {value_text(*firmware)}'),
         'saved_previous_enable_gpu_firmware': None if backup is None else _backup_text(backup),
+        'gsp_forced_by_old_loader': _set_by_old_loader(firmware, backup) is not None,
         'rom_override_records': [name for name in PATCH_RECORDS if key.get(name) is not None],
     }
 
@@ -170,17 +196,6 @@ def _apply(key, steps):
                           'before restarting Windows') from None
 
 
-def _restart(platform, adapter, restart):
-    if not restart:
-        return {'requested': False, 'ok': None, 'message': 'Device not restarted (--no-restart). ' + RESTART_HINT}
-    code, output = platform.restart_device(adapter.instance_id)
-    if code == 0:
-        return {'requested': True, 'ok': True, 'message': 'Device restarted.'}
-    detail = 'pnputil did not finish' if code is None else f'pnputil exited with code {code}'
-    return {'requested': True, 'ok': False, 'exit_code': code, 'output': output,
-            'message': f'The values are written, but the device restart failed ({detail}). {RESTART_HINT}'}
-
-
 def _prepare(platform, gpu, pci, instance_id, dry_run):
     adapter = select(platform.adapters(), gpu, pci, instance_id)
     if not dry_run and not platform.is_admin():
@@ -188,7 +203,7 @@ def _prepare(platform, gpu, pci, instance_id, dry_run):
     return adapter
 
 
-def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False, restart=True):
+def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False):
     adapter = _prepare(platform, gpu, pci, instance_id, dry_run)
     version = nvidia_version(adapter.driver_version)
     if version is None:
@@ -206,9 +221,11 @@ def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False,
         before = describe(key)
         firmware, backup = key.get_raw(FIRMWARE), key.get(BACKUP)
         steps, notes, extra = [], [], {}
+        expected, old = firmware, None      # EnableGpuFirmware reads back unchanged unless loader 0.3.x set it
         if backup is not None:
             if _saved(backup) is None:
                 raise LoaderError(f'{BACKUP} holds an unexpected value; run unload first')
+            old = _set_by_old_loader(firmware, backup)
         else:
             dword = None if firmware is None else _dword(decode(*firmware))
             if firmware is None:
@@ -224,19 +241,28 @@ def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False,
                 backup = (REG_SZ, _raw_backup(kind, raw))
                 extra['raw_backup'] = {'type': type_name(kind), 'size': len(raw), 'value': value_text(kind, raw),
                                        'backup': backup[1]}
-                shown = f'{len(raw)}-byte REG_DWORD' if kind == REG_DWORD else type_name(kind)
-                held, saved = (('holds', 'Load saves it exactly as it is and replaces it with') if dry_run else
-                               ('held', 'It was saved exactly as it was and replaced by'))
-                notes.append(f'{FIRMWARE} {held} a {shown} value (set by another tool or by hand). {saved} REG_DWORD '
-                             f'{FIRMWARE_OVERRIDE:#04x}, the value the override needs; unload puts it back.')
             steps.append(('set', BACKUP, *backup))
             if before['vbios'] is not None or before['rom_override_records']:
                 extra['replaces_other_override'] = True
                 current = (before['enable_gpu_firmware'] or 'not set').removeprefix('unexpected ')
-                notes.insert(0, 'An override written by another tool (for example mVolt+) is replaced and will not be '
-                                f'restored; unload restores {FIRMWARE} to its current value ({current}).')
+                notes.append('An override written by another tool (for example mVolt+) is replaced and will not be '
+                             f'restored; unload restores {FIRMWARE} to its current value ({current}).')
         steps += [('delete', name) for name in before['rom_override_records']]
-        steps += [('set', VBIOS, REG_BINARY, chain.data), ('set', FIRMWARE, REG_DWORD, FIRMWARE_OVERRIDE)]
+        steps.append(('set', VBIOS, REG_BINARY, chain.data))
+        if old is not None:
+            # Loader 0.3.x replaced the saved value with 0x11: put it back with the step unload uses.
+            step, expected = old
+            steps.append(step)
+            extra['restores_firmware'] = before['saved_previous_enable_gpu_firmware']
+            notes.append(f"{FIRMWARE} goes back to its value before the first load: {extra['restores_firmware']}. "
+                         f"Loader 0.3.2 or older set it to {FIRMWARE_OVERRIDE:#04x}, which turns on the driver's GSP "
+                         'firmware mode; this version no longer turns that mode on.')
+        elif expected == OLD_FIRMWARE:
+            # unload writes the saved 0x11 back, so the note says to delete it while no override is loaded.
+            extra['keeps_gsp_firmware_mode'] = True
+            notes.append(f'GSP firmware mode stays on because {FIRMWARE} was already {FIRMWARE_OVERRIDE:#04x} before '
+                         "the first load (for example set by mVolt+). For the driver's default mode, run unload (it "
+                         f'puts {FIRMWARE_OVERRIDE:#04x} back), delete {FIRMWARE}, load again and restart Windows.')
         report = {'gpu': _adapter_info(adapter), 'dry_run': dry_run, 'before': before,
                   'payload': {'family': chain.family, 'size': len(chain.data),
                               'sha256': hashlib.sha256(chain.data).hexdigest(), 'file_size': len(data),
@@ -247,18 +273,18 @@ def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False,
         if dry_run:
             return report
         _apply(key, steps)
-        after = key.get(VBIOS), key.get(FIRMWARE), key.get(BACKUP)
-        if after[0] != (REG_BINARY, chain.data) or after[1] != (REG_DWORD, FIRMWARE_OVERRIDE) or after[2] != backup \
+        after = key.get(VBIOS), key.get_raw(FIRMWARE), key.get(BACKUP)
+        if after[0] != (REG_BINARY, chain.data) or after[1] != expected or after[2] != backup \
                 or any(key.get(name) is not None for name in PATCH_RECORDS):
             raise LoaderError('the registry values read back differ from what was written; run unload')
         report['after'] = describe(key)
     finally:
         key.close()
-    report['restart'] = _restart(platform, adapter, restart)
+    report['next_step'] = RESTART_HINT       # the driver reads the new image only after a Windows restart
     return report
 
 
-def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False, restart=True):
+def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False):
     adapter = _prepare(platform, gpu, pci, instance_id, dry_run)
     key = platform.open_key(adapter, write=not dry_run)
     try:
@@ -267,15 +293,9 @@ def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False, res
         steps, message = [], None
         expected_firmware = key.get_raw(FIRMWARE)
         saved = None if backup is None else _saved(backup)
-        if saved == ABSENT:
-            steps.append(('delete', FIRMWARE))
-            expected_firmware = None
-        elif isinstance(saved, int):
-            steps.append(('set', FIRMWARE, REG_DWORD, saved))
-            expected_firmware = (REG_DWORD, saved.to_bytes(4, 'little'))
-        elif saved is not None:
-            steps.append(('restore', FIRMWARE, *saved))
-            expected_firmware = saved
+        if saved is not None:
+            step, expected_firmware = _put_back(saved)
+            steps.append(step)
         elif backup is not None:
             message = f'{BACKUP} holds an unexpected value; {FIRMWARE} is left as it is.'
         else:
@@ -307,7 +327,8 @@ def unload(platform, *, gpu=None, pci=None, instance_id=None, dry_run=False, res
         report['after'] = describe(key)
     finally:
         key.close()
-    report['restart'] = _restart(platform, adapter, restart)
+    # The driver keeps the removed image cached, and running, until Windows restarts.
+    report['next_step'] = RESTART_HINT
     return report
 
 
@@ -332,9 +353,10 @@ def verify(platform, *, gpu=None, pci=None, instance_id=None):
         state, message = 'unstable', 'Two reads of the running VBIOS differ; try again.'
         report['second_readback'] = _image(again)
     elif configured is None:
-        # A removed override keeps running until the GPU restarts, and the readback cannot tell the two apart.
+        # The driver keeps a removed override in its image cache, running, until Windows restarts, and the
+        # readback cannot tell it from the card's own VBIOS.
         state, message = 'no-override', ("No override is stored, so the driver should be running the card's own "
-                                         'VBIOS. If one was just removed, restart the GPU or Windows first.')
+                                         'VBIOS. If one was just removed, restart Windows first.')
         if records:
             message += " romOverride records are stored too; the driver may apply them to the card's VBIOS."
     else:
@@ -354,7 +376,7 @@ def verify(platform, *, gpu=None, pci=None, instance_id=None):
             report['first_difference'] = offset
             state = 'override-not-active'
             message = (f'The driver is NOT using the stored override (first difference at offset {offset:#x}). If it '
-                       'was just loaded, restart the GPU or Windows; otherwise the driver may have rejected it and is '
-                       "running the card's own VBIOS.")
+                       'was just loaded, restart Windows; otherwise the driver may have rejected it and is running the '
+                       "card's own VBIOS.")
     report.update(state=state, message=message)
     return report

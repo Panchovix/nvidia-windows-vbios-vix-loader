@@ -3,13 +3,13 @@
 English | [Español](README_es.md)
 
 Loads a modified VBIOS for an NVIDIA GPU on Windows **without flashing it**. The image is stored in the
-GPU's driver registry key, where the NVIDIA driver looks for a VBIOS override when the device starts, and
-the device is restarted. `verify` checks that the driver is running it, and `unload` removes it again. The
-card's flash chip is never written.
+GPU's driver registry key, where the NVIDIA driver looks for a VBIOS override, and it applies after you
+restart Windows. `verify` checks that the driver is running it, and `unload` removes it again. The card's
+flash chip is never written.
 
-Works with NVIDIA 616.x, 617.x and 621.x drivers (616.56 or newer; tested on 617.42, 617.70 and 621.01). It may
-stop working in a future driver if NVIDIA decides to change or remove the registry override, so click **Verify**
-after every driver update.
+Works with NVIDIA 616.x, 617.x and 621.x drivers (616.56 or newer; tested on 621.01 in the driver's default
+mode, and with versions up to 0.3.2 on 617.42 and 617.70). It may stop working in a future driver if NVIDIA
+decides to change or remove the registry override, so click **Verify** after every driver update.
 
 Thanks to **@pantsoftime** ([overclock.net](https://www.overclock.net)), whose original `vbios_override` work
 this project family is built on. Without it, none of this would have been possible.
@@ -32,25 +32,45 @@ Corporation.
 | Value | Type | Content |
 | --- | --- | --- |
 | `vbios` | REG_BINARY | The VBIOS image chain from your file: from the legacy image to the end of the last image. Bytes before and after it in the file are not stored. |
-| `EnableGpuFirmware` | REG_DWORD | `0x11` (GSP firmware on, fallback allowed). |
-| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | The previous `EnableGpuFirmware` value, saved on the first `load` only so `unload` can restore it: `absent`, a DWORD such as `0x00000012`, or, if it was not a 4-byte REG_DWORD (another tool or a hand edit can leave a REG_SZ, REG_QWORD, REG_BINARY or a DWORD of another size there), an exact copy of its type and bytes written the way a `.reg` file writes them, for example `hex(1):31,00,00,00`. |
+| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | The `EnableGpuFirmware` value before the first `load`, saved on the first `load` only so `unload` can restore it: `absent`, a DWORD such as `0x00000012`, or, if it was not a 4-byte REG_DWORD (another tool or a hand edit can leave a REG_SZ, REG_QWORD, REG_BINARY or a DWORD of another size there), an exact copy of its type and bytes written the way a `.reg` file writes them, for example `hex(1):31,00,00,00`. |
 
-It also deletes `romOverride00` to `romOverrideFF` if present, flushes the key, reads the values back and
-restarts the GPU with `pnputil /restart-device`. If the restart fails, restart Windows.
+It also deletes `romOverride00` to `romOverrideFF` if present, flushes the key and reads the values back. It
+leaves `EnableGpuFirmware` as it is, except that it puts back the value saved by an older version that set it
+to `0x11`.
 
-These are the same `vbios` and `EnableGpuFirmware` values that mVolt+ writes when it loads a BIOS file, so a
-BIOS loaded with mVolt+ on the same GPU is replaced. This project is not affiliated with mVolt+. Other values
-in the key are left alone.
+Versions up to 0.3.2 also set `EnableGpuFirmware` to `0x11`, which turns on the driver's GSP firmware mode. On
+Windows the driver does not use that mode by default for GeForce and RTX workstation cards (RTX 50 included),
+and on an RTX 4070 it made the display driver reset every time Apple Music started, even without an override.
+In its default mode the driver reads the override itself.
 
-`unload` deletes `vbios` and any `romOverride` records, restores `EnableGpuFirmware` exactly as it was, with
-the same type (or deletes it if it was absent), deletes `VixLoaderPreviousEnableGpuFirmware` and restarts the
-GPU. If the saved value starts with `hex(`, remove the override with version 0.3.2 or newer: older versions
-don't read that form, so they delete it and leave `EnableGpuFirmware` at `0x11`.
+Restart Windows to apply the change, with **Restart**, not Shut down: after a shutdown, Fast Startup resumes
+the old driver state. The driver keeps the image until Windows restarts, so restarting only the GPU is not
+enough to apply or remove an override.
+
+mVolt+ stores its BIOS file in the same `vbios` value (and sets `EnableGpuFirmware` to `0x11`), so a BIOS
+loaded with mVolt+ on the same GPU is replaced. If `EnableGpuFirmware` was already `0x11` before the first
+`load`, it stays, and so does GSP firmware mode. For the driver's default mode, delete `EnableGpuFirmware`
+before the first `load`. If the override is already loaded, run `unload` first (it puts `0x11` back), then
+delete the value, `load` again and restart Windows. This project is not affiliated with mVolt+. Other values in
+the key are left alone.
+
+`unload` deletes `vbios` and any `romOverride` records, restores `EnableGpuFirmware` exactly as it was before
+the first `load`, with the same type (or deletes it if it was absent), and deletes
+`VixLoaderPreviousEnableGpuFirmware`. It does not restart the GPU: restart Windows. If the saved value starts
+with `hex(`, remove the override with version 0.3.2 or newer: older versions don't read that form, so they
+delete it and leave `EnableGpuFirmware` at `0x11`.
 
 It does **not** flash the card, edit the VBIOS, or change clocks, fans or power limits by itself. `unload`
 returns the key to its state before the first `load`, except that an override written by another tool
 (mVolt+ `vbios` or `romOverride` records) is not restored; in that case `load` says so, and `unload` leaves
 `EnableGpuFirmware` as that tool set it.
+
+## Upgrading from 0.3.2 or older
+
+Versions up to 0.3.2 set `EnableGpuFirmware` to `0x11` on every GPU with an override, which keeps those GPUs in
+GSP firmware mode. Load the same file again with 0.4.0 (it puts the saved value back), or remove the override,
+and restart Windows. `status`, and the **Messages** area of the window, show the GPUs that still have GSP
+firmware mode on from an older version.
 
 ## Antivirus warnings
 
@@ -69,6 +89,17 @@ And lastly, if you don't want to use this loader for an edited VBIOS, you can us
 that its BIOS override works mostly on Blackwell.
 
 ## Status
+
+The driver's default mode, the state 0.4.0 leaves (`vbios` stored, `EnableGpuFirmware` absent or at its default
+`0x12`), was tested with driver 621.01 on an RTX 4090, an RTX 5070 and an RTX A2000 (the A2000 drives the
+display): after a Windows restart, Verify confirmed the override on all three, and the edited power limits
+(raised maximums and lowered minimums) applied and held under load. On the A2000, Apple Music opened and ran
+without a driver reset. Turing GPUs, laptops and drivers other than 621.01 are not tested in the default mode
+yet. If a GPU does not start in the default mode, remove the override in
+Safe Mode (see [If the GPU does not start](#if-the-gpu-does-not-start)) and open an issue; version 0.3.2, which
+turns GSP firmware mode on, stays available.
+
+Earlier results, with versions up to 0.3.2 (GSP firmware mode):
 
 | GPU family | State |
 | --- | --- |
@@ -97,7 +128,7 @@ it: load that file. The commands below do the same from the command line.
 
 - **Blackwell**: the ROM saved by Vix Editor after editing, or any edited single-bank dump (for example from
   GPU-Z). If it is refused because of two banks, run `.\nvbios.exe normalize edited.rom payload.bin`.
-- **Ada**: the GSP firmware loads at most 512 KiB counted from the legacy image, so the payload must be
+- **Ada**: the driver loads at most 512 KiB counted from the legacy image, so the payload must be
   relocated: `.\nvbios.exe normalize edited.rom payload.bin --representation ada-relocated-v2`. Larger
   payloads are refused.
 - **Ampere GA102–GA107**: the same 512 KiB limit. Use
@@ -117,15 +148,12 @@ it: load that file. The commands below do the same from the command line.
    override state.
 4. Click **VBIOS file...** and choose the file. The window checks it for the selected GPU right away and
    shows either OK (family, bytes to store, sha256) or why it is refused.
-5. Click **Load** (the same as `load`), read the confirmation (GPU, file, registry changes) and accept. With
-   **Restart the GPU now** on, the GPU is restarted (this can take up to 45 seconds); with it off, restart
-   Windows afterwards. If this GPU drives your screen, turn **Restart the GPU now** off and restart Windows
-   instead: restarting the GPU that drives the screen can leave it with no signal (seen on an RTX 2070 SUPER,
-   where the same override then worked after a full restart).
-6. To check that the driver is running the loaded VBIOS, click **Verify** (the same as `verify`, see
-   [Verify](#verify)).
-7. To go back to the card's own VBIOS, select the GPU and click **Remove override** (the same as
-   `unload`).
+5. Click **Load** (the same as `load`), read the confirmation (GPU, file, registry changes) and accept. Then
+   restart Windows (**Restart**, not Shut down) to apply the override.
+6. After the restart, click **Verify** to check that the driver is running the loaded VBIOS (the same as
+   `verify`, see [Verify](#verify)).
+7. To go back to the card's own VBIOS, select the GPU, click **Remove override** (the same as `unload`) and
+   restart Windows.
 
 Every result and warning is also written in the **Messages** area. The window is in Spanish when Windows
 is; the **Language** menu, or `vbios-loader-gui.exe --lang en` / `--lang es`, changes it. It is dark when
@@ -143,24 +171,24 @@ in its folder.
 # Show what would be written, without writing anything.
 .\vbios-loader.exe load .\payload.bin --gpu 0 --dry-run
 
-# Store the override and restart the GPU.
+# Store the override, then restart Windows to apply it.
 .\vbios-loader.exe load .\payload.bin --gpu 0
 
-# Check that the driver is running the stored override.
+# After the restart, check that the driver is running the stored override.
 .\vbios-loader.exe verify --gpu 0
 
-# Remove it and restart the GPU.
+# Remove it, then restart Windows.
 .\vbios-loader.exe unload --gpu 0
 ```
 
 - Select the GPU with `--gpu INDEX` (as shown by `status`) or `--pci BUS:DEV.FN` (for example `--pci 01:00.0`).
   With a single NVIDIA GPU the selection can be omitted.
-- `--no-restart` writes the values without restarting the GPU; they apply at the next restart.
+- `--no-restart` has no effect: the loader no longer restarts the GPU, and the option is still accepted so
+  older scripts keep working.
 - `--json` prints machine-readable output.
 - Exit codes: `0` done, `1` refused or failed (nothing written unless the message says so), `2` invalid
-  command-line arguments (nothing written), `3` values written but the GPU restart failed (restart Windows),
-  `4` `verify` found that the driver is not running the stored override (or its two reads differed), `70`
-  unexpected internal error, `130` interrupted (Ctrl+C).
+  command-line arguments (nothing written), `4` `verify` found that the driver is not running the stored
+  override (or its two reads differed), `70` unexpected internal error, `130` interrupted (Ctrl+C).
 
 The override stays in the GPU's registry key until you remove it, so it applies again at every Windows
 start. A clean driver installation or a driver update can recreate the driver key and drop the override. Run
@@ -173,16 +201,17 @@ From source, with Python 3.11 or newer: `pip install .` then `vbios-loader statu
 ## Verify
 
 **Verify** in the window, or `verify` on the command line, reads back through NvAPI the VBIOS image that the
-driver's GSP firmware is running, twice, and compares it byte by byte with the override stored in the
-registry. It writes nothing and needs no administrator rights. The result (`state` in `--json`) is one of:
+driver is running, twice, and compares it byte by byte with the override stored in the registry. It writes
+nothing and needs no administrator rights. After loading or removing an override, restart Windows before
+checking. The result (`state` in `--json`) is one of:
 
 - `override-active`: the running image is the stored override, so the driver accepted it.
-- `override-not-active`: they differ, and the first differing offset is shown. Right after a load without a
-  GPU restart this is expected; otherwise the driver probably rejected the override and is running the
-  card's own VBIOS.
+- `override-not-active`: they differ, and the first differing offset is shown. Right after a load, before
+  restarting Windows, this is expected; otherwise the driver probably rejected the override and is running
+  the card's own VBIOS.
 - `no-override`: nothing is stored, so the driver should be running the card's own VBIOS (its size and
-  sha256 are shown). A removed override keeps running until the GPU or Windows restarts, and Verify cannot
-  tell it apart, so restart before checking a removal.
+  sha256 are shown). A removed override keeps running until Windows restarts, and Verify cannot tell it
+  apart, so restart Windows before checking a removal.
 - `unstable`: the two reads differ; try again.
 
 NvAPI returns at most 1,024,000 bytes, so a longer override is compared on those bytes only: the result then
@@ -195,30 +224,27 @@ work inside a virtual machine with a paravirtualized GPU (GPU-P).
 Test first on a GPU that is **not** driving your display (use the integrated graphics or another card for
 the screen), so you can always run `unload`.
 
-If the screen stays black right after a load with **Restart the GPU now**, restart Windows first: the
-override stays stored and may work after a full restart.
-
 If Windows shows no image or the GPU fails in Device Manager:
 
 1. Boot into Safe Mode: hold Shift while clicking Restart, then Troubleshoot → Advanced options → Startup
    Settings → Restart → 4 (Enable Safe Mode). Without a usable desktop, turn the PC off during boot two or
    three times (or boot Windows installation media → Repair your computer) to reach the same Troubleshoot
    menu. The NVIDIA driver does not load in Safe Mode, so the screen works there.
-2. Open `vbios-loader-gui.exe`, select the GPU, turn off **Restart the GPU now** and click **Remove override**;
-   or, in an elevated PowerShell, run `.\vbios-loader.exe unload --gpu 0 --no-restart` (use the GPU's index
-   from `status`). Then restart Windows normally.
+2. Open `vbios-loader-gui.exe`, select the GPU and click **Remove override**; or, in an elevated PowerShell,
+   run `.\vbios-loader.exe unload --gpu 0` (use the GPU's index from `status`). Then restart Windows
+   normally.
 3. If that does not work, open `regedit` and go to
    `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}`.
    Open the numbered subkey whose `DriverDesc` is your GPU (`status` shows it as `driver_key`). If
    `VixLoaderPreviousEnableGpuFirmware` starts with `hex(`, use step 4 instead. Otherwise delete `vbios`, set
    `EnableGpuFirmware` back to the saved value, or delete `EnableGpuFirmware` if the saved value is `absent`.
-   Then delete `VixLoaderPreviousEnableGpuFirmware` and restart.
+   Then delete `VixLoaderPreviousEnableGpuFirmware` and restart Windows.
 4. If the saved value starts with `hex(`, `EnableGpuFirmware` was not a 4-byte REG_DWORD before the first
    `load`, and the saved text is an exact copy of it in `.reg` file notation. The easiest way to put it back
    is a `.reg` file instead of step 3: save these lines in Notepad as `restore.reg`, with `NNNN` replaced by
    the subkey number and the text after `"EnableGpuFirmware"=` replaced by the saved value. Double-click the
-   file (or run `reg import restore.reg` in an elevated PowerShell) and restart. It also deletes `vbios` and
-   the saved value.
+   file (or run `reg import restore.reg` in an elevated PowerShell) and restart Windows. It also deletes
+   `vbios` and the saved value.
 
    ```
    Windows Registry Editor Version 5.00

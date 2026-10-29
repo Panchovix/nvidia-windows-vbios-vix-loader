@@ -1,4 +1,4 @@
-"""Windows implementation of the device interface (devices.py): SetupAPI, the registry, pnputil and NvAPI.
+"""Windows implementation of the device interface (devices.py): SetupAPI, the registry and NvAPI.
 
 Importing this module is harmless on other systems; the DLLs load when Win32Platform is created,
 nvapi64.dll only when vbios_image reads an image.
@@ -6,8 +6,6 @@ nvapi64.dll only when vbios_image reads an image.
 from __future__ import annotations
 import ctypes
 from ctypes import wintypes
-import os
-import subprocess
 from .devices import REG_SZ, Adapter, decode, encode, parse_instance_id, parse_location, pci_location
 from .nvapi import read_vbios_image
 
@@ -24,7 +22,6 @@ SPDRP_ADDRESS = 0x1C
 ERROR_FILE_NOT_FOUND = 2
 ERROR_MORE_DATA = 234
 ERROR_NO_MORE_ITEMS = 259
-RESTART_TIMEOUT = 45
 
 
 class GUID(ctypes.Structure):
@@ -207,13 +204,3 @@ class Win32Platform:
 
     def vbios_image(self, adapter):
         return read_vbios_image(adapter.location)
-
-    def restart_device(self, instance_id):
-        pnputil = os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'pnputil.exe')
-        try:
-            result = subprocess.run([pnputil, '/restart-device', instance_id], capture_output=True, text=True,
-                                    errors='replace', timeout=RESTART_TIMEOUT,
-                                    creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            return None, str(exc)
-        return result.returncode, (result.stdout + result.stderr).strip()

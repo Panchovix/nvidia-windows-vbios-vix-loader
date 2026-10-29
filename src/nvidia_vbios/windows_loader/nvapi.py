@@ -1,6 +1,7 @@
-"""NvAPI (nvapi64.dll): read back the VBIOS image that the driver's GSP firmware is running.
+"""NvAPI (nvapi64.dll): read back the VBIOS image that the driver is running.
 
-NvAPI_GPU_GetVbiosImage returns the firmware's working copy: the override when the driver accepted it,
+NvAPI_GPU_GetVbiosImage returns the image the driver is running: in the driver's default mode its own copy, in
+GSP firmware mode the GSP firmware's working copy. Either is the override when the driver accepted it,
 otherwise the card's own image. nvapi64.dll loads only when an image is read, so importing this module is
 harmless on any system. Every function comes from nvapi_QueryInterface(id), which returns NULL for a function
 that this driver does not have; tests pass their own query function.

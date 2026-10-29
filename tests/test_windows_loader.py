@@ -95,9 +95,9 @@ class FakeKey:
 
 
 class FakePlatform:
-    def __init__(self, adapters=(), keys=None, admin=True, restart=(0, ''), image=b''):
-        self._adapters, self.keys, self.admin, self.restart = list(adapters), keys or {}, admin, restart
-        self.restarted, self.writable_opens = [], 0
+    def __init__(self, adapters=(), keys=None, admin=True, image=b''):
+        self._adapters, self.keys, self.admin = list(adapters), keys or {}, admin
+        self.writable_opens = 0
         self.image, self.reads = image, []      # what vbios_image returns, and the devices it was read from
 
     def adapters(self):
@@ -109,10 +109,6 @@ class FakePlatform:
 
     def is_admin(self):
         return self.admin
-
-    def restart_device(self, instance_id):
-        self.restarted.append(instance_id)
-        return self.restart
 
     def vbios_image(self, adapter):
         self.reads.append(adapter.instance_id)
@@ -199,25 +195,22 @@ class LoadUnloadTests(unittest.TestCase):
         fake, key = platform(values={ops.FIRMWARE: (REG_DWORD, 0x12), **records})
         report = ops.load(fake, rom(RTX_5070))
         self.assertEqual(key.values[ops.VBIOS], (REG_BINARY, chain(RTX_5070)))
-        self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
+        self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x12))       # the driver's default stays
         self.assertEqual(key.values[ops.BACKUP], (REG_SZ, '0x00000012'))
         self.assertFalse(any(name.startswith('romOverride') for name in key.values))
         for name, value in UNRELATED.items():
             self.assertEqual(key.values[name], value)
-        self.assertEqual({name for _, name in key.calls},
-                         {ops.BACKUP, ops.VBIOS, ops.FIRMWARE, 'romOverride00', 'romOverride7F'})
+        self.assertEqual({name for _, name in key.calls}, {ops.BACKUP, ops.VBIOS, 'romOverride00', 'romOverride7F'})
         self.assertEqual(key.flushes, 1)
-        self.assertEqual(fake.restarted, [fake.adapters()[0].instance_id])
-        self.assertTrue(report['restart']['ok'])
+        self.assertEqual(report['next_step'], ops.RESTART_HINT)
         self.assertEqual(report['payload']['dropped_prefix'], PREFIX)
         self.assertEqual(report['payload']['dropped_trailing'], TRAILING)
 
     def test_unload_restores_a_previous_value(self):
         fake, key = platform(values={ops.FIRMWARE: (REG_DWORD, 0x12)})
         ops.load(fake, rom(RTX_5070))
-        ops.unload(fake)
+        self.assertEqual(ops.unload(fake)['next_step'], ops.RESTART_HINT)
         self.assertEqual(key.values, {**UNRELATED, ops.FIRMWARE: (REG_DWORD, 0x12)})
-        self.assertEqual(len(fake.restarted), 2)
 
     def test_unload_deletes_a_value_that_was_absent(self):
         fake, key = platform()
@@ -242,8 +235,10 @@ class LoadUnloadTests(unittest.TestCase):
         self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
         self.assertIn('left as it is', report['message'])
         fake, key = platform()
-        self.assertIn('No override', ops.unload(fake)['message'])
-        self.assertEqual((key.calls, fake.restarted), ([], []))
+        report = ops.unload(fake)
+        self.assertIn('No override', report['message'])
+        self.assertNotIn('next_step', report)                  # nothing changed, nothing to apply
+        self.assertEqual(key.calls, [])
 
     def test_dry_run_writes_nothing_and_needs_no_admin(self):
         for operation in (lambda p: ops.load(p, rom(RTX_5070), dry_run=True), lambda p: ops.unload(p, dry_run=True)):
@@ -251,7 +246,8 @@ class LoadUnloadTests(unittest.TestCase):
                                          'romOverride01': (REG_BINARY, b'x')}, admin=False)
             report = operation(fake)
             self.assertTrue(report['dry_run'] and report['steps'])
-            self.assertEqual((key.calls, key.flushes, fake.restarted, fake.writable_opens), ([], 0, [], 0))
+            self.assertNotIn('next_step', report)
+            self.assertEqual((key.calls, key.flushes, fake.writable_opens), ([], 0, 0))
         self.assertIn({'op': 'delete', 'name': 'romOverride01'},
                       ops.load(platform(admin=False, values={'romOverride01': (REG_BINARY, b'x')})[0],
                                rom(RTX_5070), dry_run=True)['steps'])
@@ -272,7 +268,7 @@ class LoadUnloadTests(unittest.TestCase):
                 fake, key = platform(**options)
                 with self.assertRaisesRegex(ops.LoaderError, message):
                     ops.load(fake, rom(RTX_5070, 1100))
-                self.assertEqual((key.calls, fake.restarted), ([], []))
+                self.assertEqual(key.calls, [])
         fake, key = platform(admin=False, values={ops.VBIOS: (REG_BINARY, b'old')})
         with self.assertRaisesRegex(ops.LoaderError, 'administrator'):
             ops.unload(fake)
@@ -281,22 +277,22 @@ class LoadUnloadTests(unittest.TestCase):
     def test_partial_write_failure_says_so_and_unload_recovers(self):
         class FailingKey(FakeKey):
             def set(self, name, kind, value):
-                if name == ops.FIRMWARE:
-                    raise OSError(5, 'writing EnableGpuFirmware failed: Access is denied')
+                if name == ops.VBIOS:
+                    raise OSError(5, 'writing vbios failed: Access is denied')
                 super().set(name, kind, value)
         fake, key = platform()
         gpu = fake.adapters()[0]
         fake.keys[gpu.instance_id] = key = FailingKey(key.values)
         with self.assertRaisesRegex(ops.LoaderError, 'Access is denied; the registry may be partly changed.*unload'):
             ops.load(fake, rom(RTX_5070))
-        self.assertIn(ops.VBIOS, key.values)
-        self.assertEqual(fake.restarted, [])
+        self.assertEqual(key.values[ops.BACKUP], (REG_SZ, ops.ABSENT))     # written before the failure
         ops.unload(fake)
         self.assertEqual(key.values, UNRELATED)
 
     def test_other_tools_override_is_replaced_and_its_records_removed_by_unload(self):
         fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'mvolt'), ops.FIRMWARE: (REG_DWORD, 0x11)})
         self.assertIn('another tool', ops.load(fake, rom(RTX_5070))['message'])
+        self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
         ops.unload(fake)
         self.assertEqual(key.values, {**UNRELATED, ops.FIRMWARE: (REG_DWORD, 0x11)})
         fake, key = platform(values={'romOverride00': (REG_BINARY, b'r'), ops.FIRMWARE: (REG_DWORD, 0x11)})
@@ -312,28 +308,143 @@ class LoadUnloadTests(unittest.TestCase):
         self.assertIn('unexpected value', ops.unload(fake)['message'])
         self.assertEqual(key.values, {**UNRELATED, ops.FIRMWARE: (REG_DWORD, 0x11)})
 
-    def test_read_back_mismatch_is_an_error_without_restart(self):
+    def test_read_back_mismatch_is_an_error(self):
         fake, key = platform()
         key.drop_writes = True
         with self.assertRaisesRegex(ops.LoaderError, 'read back'):
             ops.load(fake, rom(RTX_5070))
-        self.assertEqual(fake.restarted, [])
 
-    def test_restart_failure_reports_the_restart_windows_hint(self):
-        for result in ((3010, 'reboot required'), (None, 'timed out')):
-            with self.subTest(result=result):
-                fake, key = platform(restart=result)
-                report = ops.load(fake, rom(RTX_5070))
-                self.assertFalse(report['restart']['ok'])
-                self.assertIn('Restart Windows', report['restart']['message'])
-                self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
+        class KeepsFirmware(FakeKey):          # EnableGpuFirmware is not deleted when 0.3.x's 0x11 is undone
+            def delete(self, name):
+                return False if name == ops.FIRMWARE else super().delete(name)
+        fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'old'), ops.FIRMWARE: (REG_DWORD, 0x11),
+                                     ops.BACKUP: (REG_SZ, ops.ABSENT)})
+        fake.keys[fake.adapters()[0].instance_id] = key = KeepsFirmware(key.values)
+        with self.assertRaisesRegex(ops.LoaderError, 'read back differ from what was written; run unload'):
+            ops.load(fake, rom(RTX_5070))
+        self.assertEqual(key.values[ops.BACKUP], (REG_SZ, ops.ABSENT))
+
+        class DropsBackup(FakeKey):            # the saved value is not written
+            def set_raw(self, name, kind, raw):
+                if name != ops.BACKUP:
+                    super().set_raw(name, kind, raw)
+
+        class KeepsRecords(FakeKey):           # romOverride records are not deleted
+            def delete(self, name):
+                return False if name.startswith('romOverride') else super().delete(name)
+        for key_class, values in ((DropsBackup, {}), (KeepsRecords, {'romOverride00': (REG_BINARY, b'r')})):
+            with self.subTest(key=key_class.__name__):
+                fake, key = platform(values=values)
+                fake.keys[fake.adapters()[0].instance_id] = key_class(key.values)
+                with self.assertRaisesRegex(ops.LoaderError, 'read back differ from what was written; run unload'):
+                    ops.load(fake, rom(RTX_5070))
+
+    def test_load_and_unload_ask_for_a_windows_restart_and_restart_nothing(self):
+        import nvidia_vbios.windows_loader.win32 as win32  # importable without its DLLs
+        self.assertFalse(hasattr(win32.Win32Platform, 'restart_device'))      # no pnputil
+        self.assertEqual(ops.RESTART_HINT, 'Restart Windows to apply the change (Restart, not Shut down).')
         fake, _ = platform()
-        self.assertEqual(ops.load(fake, rom(RTX_5070), restart=False)['restart']['requested'], False)
-        self.assertEqual(fake.restarted, [])
+        self.assertNotIn('next_step', ops.load(fake, rom(RTX_5070), dry_run=True))
+        for report in (ops.load(fake, rom(RTX_5070)), ops.unload(fake, dry_run=True), ops.unload(fake)):
+            self.assertNotIn('restart', report)
+            self.assertEqual(report.get('next_step'), None if report['dry_run'] else ops.RESTART_HINT)
+
+
+class DefaultModeTests(unittest.TestCase):
+    """load leaves EnableGpuFirmware to the driver's default mode; it only undoes the 0x11 that loader 0.3.x wrote."""
+
+    def test_a_first_load_leaves_enable_gpu_firmware_as_it_is(self):
+        values = ((None, ops.ABSENT), ((REG_DWORD, 0x12), '0x00000012'),
+                  ((REG_SZ, '1\0'.encode('utf-16-le')), 'hex(1):31,00,00,00'))
+        for device in (RTX_4090, RTX_5070, RTX_A2000, RTX_2060_SUPER):
+            for firmware, saved in values:
+                with self.subTest(device=f'{device:04x}', saved=saved):
+                    fake, key = platform(device, values=firmware and {ops.FIRMWARE: firmware})
+                    before = key.get_raw(ops.FIRMWARE)
+                    report = ops.load(fake, rom(device))
+                    self.assertEqual(key.get_raw(ops.FIRMWARE), before)
+                    self.assertNotIn(ops.FIRMWARE, {name for _, name in key.calls})
+                    self.assertEqual(key.values[ops.BACKUP], (REG_SZ, saved))
+                    self.assertEqual(key.values[ops.VBIOS], (REG_BINARY, chain(device)))
+                    self.assertEqual([step['name'] for step in report['steps']], [ops.BACKUP, ops.VBIOS])
+                    self.assertFalse({'message', 'restores_firmware', 'keeps_gsp_firmware_mode'} & set(report))
+                    self.assertFalse(report['after']['gsp_forced_by_old_loader'])
+                    self.assertEqual(report['next_step'], ops.RESTART_HINT)
+                    ops.unload(fake)
+                    self.assertEqual(key.get_raw(ops.FIRMWARE), before)
+                    self.assertEqual(set(key.values), set(UNRELATED) | ({ops.FIRMWARE} if firmware else set()))
+
+    def test_keys_left_by_0_3_2_get_the_saved_value_back(self):
+        # vbios, EnableGpuFirmware = 0x11 and the value saved before it, as loader 0.3.2 left them.
+        cases = ((ops.ABSENT, {'op': 'delete', 'name': ops.FIRMWARE}, None),
+                 ('0x00000012', {'op': 'set', 'name': ops.FIRMWARE, 'type': 'REG_DWORD', 'value': '0x12'},
+                  (REG_DWORD, b'\x12\0\0\0')),
+                 ('hex(1):31,00,00,00', {'op': 'set', 'name': ops.FIRMWARE, 'type': 'REG_SZ',
+                                         'value': "'1' (4 bytes)", 'data': '31000000'}, (REG_SZ, b'1\0\0\0')))
+        for text, step, restored in cases:
+            with self.subTest(saved=text):
+                fake, key = platform(values={ops.VBIOS: (REG_BINARY, chain(RTX_5070)), ops.FIRMWARE: (REG_DWORD, 0x11),
+                                             ops.BACKUP: (REG_SZ, text)}, admin=False)
+                override = ops.status(fake)[0]['override']
+                self.assertTrue(override['gsp_forced_by_old_loader'])
+                shown = override['saved_previous_enable_gpu_firmware']
+                report = ops.load(fake, rom(RTX_5070, data_blocks=6), dry_run=True)
+                self.assertEqual(report['steps'], [{'op': 'set', 'name': ops.VBIOS, 'type': 'REG_BINARY',
+                                                    'size': len(chain(RTX_5070, 6)),
+                                                    'sha256': report['payload']['sha256']}, step])
+                self.assertEqual(report['restores_firmware'], shown)
+                self.assertEqual(report['message'], 'EnableGpuFirmware goes back to its value before the first load: '
+                                                    f"{shown}. Loader 0.3.2 or older set it to 0x11, which turns on "
+                                                    "the driver's GSP firmware mode; this version no longer turns "
+                                                    'that mode on.')
+                self.assertEqual(key.calls, [])
+                fake.admin = True
+                report = ops.load(fake, rom(RTX_5070, data_blocks=6))
+                self.assertEqual(key.get_raw(ops.FIRMWARE), restored)
+                self.assertEqual(key.values[ops.BACKUP], (REG_SZ, text))      # kept: unload restores it again
+                self.assertEqual(key.values[ops.VBIOS], (REG_BINARY, chain(RTX_5070, 6)))
+                self.assertFalse(report['after']['gsp_forced_by_old_loader'])
+                self.assertEqual(report['next_step'], ops.RESTART_HINT)
+                report = ops.load(fake, rom(RTX_5070))                         # nothing left to undo
+                self.assertEqual([step['name'] for step in report['steps']], [ops.VBIOS])
+                self.assertNotIn('message', report)
+                ops.unload(fake)
+                self.assertEqual(key.get_raw(ops.FIRMWARE), restored)
+                self.assertEqual(set(key.values), set(UNRELATED) | ({ops.FIRMWARE} if restored else set()))
+
+    def test_a_0x11_set_before_the_first_load_stays_with_a_note(self):
+        note = ('GSP firmware mode stays on because EnableGpuFirmware was already 0x11 before the first load (for '
+                "example set by mVolt+). For the driver's default mode, run unload (it puts 0x11 back), delete "
+                'EnableGpuFirmware, load again and restart Windows.')
+        fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'mvolt'), ops.FIRMWARE: (REG_DWORD, 0x11)})
+        report = ops.load(fake, rom(RTX_5070))
+        self.assertEqual((report['replaces_other_override'], report['keeps_gsp_firmware_mode']), (True, True))
+        self.assertTrue(report['message'].startswith('An override written by another tool'))
+        self.assertTrue(report['message'].endswith('(0x11). ' + note))
+        self.assertEqual(key.values[ops.BACKUP], (REG_SZ, '0x00000011'))
+        self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_DWORD, b'\x11\0\0\0'))
+        self.assertFalse(report['after']['gsp_forced_by_old_loader'])
+        for backup in ('0x00000011', 'hex(4):11,00,00,00'):        # also an exact copy of the same DWORD
+            with self.subTest(backup=backup):
+                key.values[ops.BACKUP] = (REG_SZ, backup)
+                report = ops.load(fake, rom(RTX_5070, data_blocks=6))
+                self.assertEqual((report['message'], report['keeps_gsp_firmware_mode']), (note, True))
+                self.assertNotIn('restores_firmware', report)
+                self.assertEqual([step['name'] for step in report['steps']], [ops.VBIOS])
+                self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_DWORD, b'\x11\0\0\0'))
+        ops.unload(fake)
+        self.assertEqual(key.values, {**UNRELATED, ops.FIRMWARE: (REG_DWORD, 0x11)})
+        # As the note says: deleted while no override is loaded, it is saved as absent and unload leaves it deleted.
+        del key.values[ops.FIRMWARE]
+        self.assertNotIn('message', ops.load(fake, rom(RTX_5070)))
+        self.assertEqual(key.values[ops.BACKUP], (REG_SZ, ops.ABSENT))
+        ops.unload(fake)
+        self.assertEqual(key.values, UNRELATED)
 
 
 # EnableGpuFirmware values that are not a 4-byte REG_DWORD (set by another tool or by hand): load saves the
-# exact type and bytes in .reg notation, and unload writes them back. (type, data, backup text or None)
+# exact type and bytes in .reg notation and leaves the value, and unload writes them back. (type, data, backup text
+# or None)
 EVERY_TYPE = [
     (REG_SZ, '17\0'.encode('utf-16-le'), 'hex(1):31,00,37,00,00,00'),
     (REG_SZ, '1\x007\0'.encode('utf-16-le'), 'hex(1):31,00,00,00,37,00,00,00'),     # data after a NUL
@@ -372,15 +483,10 @@ class RawFirmwareTests(unittest.TestCase):
                 backup = 'hex(%x):' % kind + ','.join(f'{byte:02x}' for byte in raw)
                 self.assertEqual(backup, text or backup)
                 self.assertEqual(key.values[ops.BACKUP], (REG_SZ, backup))
-                self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
-                self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_DWORD, b'\x11\0\0\0'))
+                self.assertEqual(key.get_raw(ops.FIRMWARE), (kind, raw))         # left as it is
                 self.assertEqual(report['raw_backup'], {'type': type_name(kind), 'size': len(raw),
                                                         'value': value_text(kind, raw), 'backup': backup})
-                shown = f'{len(raw)}-byte REG_DWORD' if kind == REG_DWORD else type_name(kind)
-                self.assertEqual(report['message'],
-                                 f'EnableGpuFirmware held a {shown} value (set by another tool or by hand). '
-                                 'It was saved exactly as it was and replaced by REG_DWORD 0x11, the value the '
-                                 'override needs; unload puts it back.')
+                self.assertNotIn('message', report)
                 self.assertNotIn('replaces_other_override', report)
                 self.assertEqual(report['after']['saved_previous_enable_gpu_firmware'],
                                  f'{type_name(kind)} {value_text(kind, raw)}')
@@ -396,14 +502,15 @@ class RawFirmwareTests(unittest.TestCase):
         qword = (0x11).to_bytes(8, 'little')
         fake, key = platform(values={ops.FIRMWARE: (REG_QWORD, qword)})
         self.assertEqual(ops.status(fake)[0]['override']['enable_gpu_firmware'], 'unexpected REG_QWORD 0x11')
-        ops.load(fake, rom(RTX_5070), restart=False)
+        ops.load(fake, rom(RTX_5070))
         override = ops.status(fake)[0]['override']
         self.assertEqual((override['enable_gpu_firmware'], override['saved_previous_enable_gpu_firmware']),
-                         ('0x11', 'REG_QWORD 0x11'))
+                         ('unexpected REG_QWORD 0x11', 'REG_QWORD 0x11'))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             cli.main(['status'], platform=fake)
-        self.assertIn('EnableGpuFirmware: 0x11 (saved previous value: REG_QWORD 0x11)', out.getvalue())
+        self.assertIn('EnableGpuFirmware: unexpected REG_QWORD 0x11 (saved previous value: REG_QWORD 0x11)',
+                      out.getvalue())
         for kind, raw, shown in ((REG_SZ, '17\0'.encode('utf-16-le'), "unexpected REG_SZ '17' (6 bytes)"),
                                  (REG_SZ, '1\x007\0'.encode('utf-16-le'), "unexpected REG_SZ '1\\x007' (8 bytes)"),
                                  (REG_MULTI_SZ, 'a\0b\0\0'.encode('utf-16-le'),
@@ -424,6 +531,7 @@ class RawFirmwareTests(unittest.TestCase):
                                              ops.FIRMWARE: (REG_DWORD, 0x11)})
                 ops.load(fake, rom(RTX_5070, data_blocks=6))           # accepted, and kept as it is
                 self.assertEqual(key.values[ops.BACKUP], (REG_SZ, text))
+                self.assertEqual(key.get_raw(ops.FIRMWARE), expected)  # 0.3.x's 0x11 is undone already
                 step = {'op': 'delete', 'name': ops.FIRMWARE} if expected is None else \
                     {'op': 'set', 'name': ops.FIRMWARE, 'type': 'REG_DWORD', 'value': f'{int(text, 16):#04x}'}
                 self.assertEqual(ops.unload(fake, dry_run=True)['steps'][0], step)
@@ -448,19 +556,18 @@ class RawFirmwareTests(unittest.TestCase):
         report = ops.load(fake, rom(RTX_5070), dry_run=True)
         self.assertEqual(report['steps'][0], {'op': 'set', 'name': ops.BACKUP, 'type': 'REG_SZ',
                                               'value': 'hex(b):11,00,00,00,00,00,00,00'})
-        self.assertEqual(report['steps'][-1], {'op': 'set', 'name': ops.FIRMWARE, 'type': 'REG_DWORD', 'value': '0x11'})
-        self.assertEqual(report['message'], 'EnableGpuFirmware holds a REG_QWORD value (set by another tool or by '
-                                            'hand). Load saves it exactly as it is and replaces it with REG_DWORD '
-                                            '0x11, the value the override needs; unload puts it back.')
+        self.assertEqual([step['name'] for step in report['steps']], [ops.BACKUP, ops.VBIOS])
+        self.assertNotIn('message', report)
         self.assertEqual(key.calls, [])
         out = io.StringIO()
         with contextlib.redirect_stdout(out), tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'edited.rom'
             path.write_bytes(rom(RTX_5070))
             self.assertEqual(cli.main(['load', str(path), '--dry-run'], platform=fake), 0)
-        self.assertIn('  set VixLoaderPreviousEnableGpuFirmware = REG_SZ hex(b):11,00,00,00,00,00,00,00\n',
-                      out.getvalue())
-        self.assertIn('Load saves it exactly as it is', out.getvalue())
+        self.assertIn('  set VixLoaderPreviousEnableGpuFirmware = REG_SZ hex(b):11,00,00,00,00,00,00,00\n'
+                      '  set vbios = REG_BINARY ', out.getvalue())
+        self.assertNotIn('set EnableGpuFirmware', out.getvalue())
+        self.assertTrue(out.getvalue().endswith('\nDry run: nothing was written.\n'))
 
         fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'x'), ops.FIRMWARE: (REG_DWORD, 0x11),
                                      ops.BACKUP: (REG_SZ, 'hex(1):31,00,00,00,37,00')}, admin=False)
@@ -478,12 +585,14 @@ class RawFirmwareTests(unittest.TestCase):
         self.assertEqual(cli.step_text(step), 'set VixLoaderPreviousEnableGpuFirmware = REG_SZ hex(3):'
                          + '00,' * 24 + '0... (12294 characters)')
 
-    def test_another_tools_override_and_a_non_dword_value_are_both_noted(self):
+    def test_another_tools_override_is_noted_and_a_non_dword_value_kept(self):
         fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'mvolt'), ops.FIRMWARE: (REG_SZ, b'\x11\0')})
         report = ops.load(fake, rom(RTX_5070))
         self.assertTrue(report['replaces_other_override'])
-        self.assertRegex(report['message'], r"^An override written by another tool .*value \(REG_SZ '\\x11' "
-                                            r"\(2 bytes\)\)\. EnableGpuFirmware held a REG_SZ value")
+        self.assertEqual(report['message'], 'An override written by another tool (for example mVolt+) is replaced and '
+                                            'will not be restored; unload restores EnableGpuFirmware to its current '
+                                            "value (REG_SZ '\\x11' (2 bytes)).")
+        self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_SZ, b'\x11\0'))
         ops.unload(fake)
         self.assertEqual(key.values, {**UNRELATED, ops.FIRMWARE: (REG_SZ, b'\x11\0')})
 
@@ -593,36 +702,79 @@ class CliTests(unittest.TestCase):
 
     def test_status_reports_the_stored_override(self):
         fake, key = platform(values={'romOverride02': (REG_BINARY, b'x')})
-        ops.load(fake, rom(RTX_5070), restart=False)
+        ops.load(fake, rom(RTX_5070))
         key.values['romOverride02'] = (REG_BINARY, b'x')
         code, out, _ = self.run_cli(['status', '--json'], fake)
         entry = json.loads(out)[0]
         self.assertEqual(code, 0)
         self.assertEqual((entry['location'], entry['pci_id'], entry['nvidia_driver_version']), ('01:00.0', '10de:2c09', '616.56'))
         self.assertEqual(entry['override']['vbios']['size'], len(chain(RTX_5070)))
-        self.assertEqual(entry['override']['enable_gpu_firmware'], '0x11')
+        self.assertIsNone(entry['override']['enable_gpu_firmware'])
         self.assertEqual(entry['override']['saved_previous_enable_gpu_firmware'], 'absent')
+        self.assertIs(entry['override']['gsp_forced_by_old_loader'], False)
         self.assertEqual(entry['override']['rom_override_records'], ['romOverride02'])
-        self.assertIn('romOverride records: 1', self.run_cli(['status'], fake)[1])
+        out = self.run_cli(['status'], fake)[1]
+        self.assertIn('  EnableGpuFirmware: not set (saved previous value: absent)\n', out)
+        self.assertIn('romOverride records: 1', out)
+        self.assertNotIn('GSP firmware mode', out)
+
+    def test_status_flags_gpus_left_in_gsp_firmware_mode_by_0_3_x(self):
+        line = ('  GSP firmware mode: on, set by loader 0.3.2 or older; load the file again with this version (or '
+                'unload it) and restart Windows.')
+        old = {ops.VBIOS: (REG_BINARY, b'x'), ops.FIRMWARE: (REG_DWORD, 0x11)}
+        cases = (({**old, ops.BACKUP: (REG_SZ, ops.ABSENT)}, True),
+                 ({**old, ops.BACKUP: (REG_SZ, 'hex(b):12,00,00,00,00,00,00,00')}, True),
+                 ({**old, ops.BACKUP: (REG_SZ, '0x00000011')}, False),     # 0x11 before the first load
+                 ({**old, ops.BACKUP: (REG_SZ, 'junk')}, False),           # unload leaves EnableGpuFirmware
+                 (old, False),                                             # mVolt+, no saved value
+                 ({**old, ops.BACKUP: (REG_SZ, ops.ABSENT), ops.FIRMWARE: (REG_DWORD, 0x12)}, False),
+                 ({**old, ops.BACKUP: (REG_SZ, ops.ABSENT), ops.FIRMWARE: (REG_DWORD, b'\x11\0')}, False))
+        for values, flagged in cases:
+            with self.subTest(values=values):
+                fake, _ = platform(values=values)
+                code, out, _ = self.run_cli(['status', '--json'], fake)
+                self.assertEqual(code, 0)
+                self.assertIs(json.loads(out)[0]['override']['gsp_forced_by_old_loader'], flagged)
+                lines = self.run_cli(['status'], fake)[1].splitlines()
+                self.assertEqual(line in lines, flagged)
+                if flagged:     # right after the EnableGpuFirmware line
+                    self.assertTrue(lines[lines.index(line) - 1].startswith('  EnableGpuFirmware: 0x11 (saved '))
 
     def test_load_and_unload_commands(self):
-        fake, key = platform(restart=(1, 'failed'))
+        fake, key = platform()
+        hint = '\nRestart Windows to apply the change (Restart, not Shut down).\n'
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'edited.rom'
             path.write_bytes(rom(RTX_5070))
             code, out, _ = self.run_cli(['load', str(path), '--pci', '01:00.0', '--dry-run'], fake)
             self.assertEqual(code, 0)
-            self.assertIn('Dry run: nothing was written.', out)
+            self.assertTrue(out.endswith('\nDry run: nothing was written.\n'))
+            self.assertNotIn('Restart', out)
             code, out, _ = self.run_cli(['load', str(path), '--gpu', '0', '--json'], fake)
-            self.assertEqual(code, 3)
-            self.assertFalse(json.loads(out)['ok'])
+            report = json.loads(out)
+            self.assertEqual((code, report['ok'], report['next_step']), (0, True, ops.RESTART_HINT))
+            self.assertNotIn('restart', report)
+            code, out, _ = self.run_cli(['load', str(path)], fake)
+            self.assertEqual(code, 0)
+            self.assertTrue(out.endswith(hint))
             code, out, err = self.run_cli(['load', str(Path(directory) / 'missing.rom')], fake)
             self.assertEqual(code, 1)
             self.assertIn('cannot read', err)
+            # --no-restart is still accepted, so older scripts and instructions keep working; it changes nothing.
+            reports = []
+            for extra in ([], ['--no-restart']):
+                other, _ = platform()
+                code, out, _ = self.run_cli(['load', str(path), '--json', *extra], other)
+                reports.append((code, json.loads(out)))
+            self.assertEqual(reports[0], reports[1])
         code, out, _ = self.run_cli(['unload', '--no-restart'], fake)
         self.assertEqual(code, 0)
-        self.assertIn('Restart Windows', out)
+        self.assertTrue(out.endswith(hint))
         self.assertEqual(key.values, UNRELATED)
+        with contextlib.redirect_stdout(io.StringIO()) as text, self.assertRaises(SystemExit):
+            cli.main(['load', '--help'], platform=fake)
+        self.assertIn('--no-restart no effect, kept for compatibility: the loader no longer restarts the GPU',
+                      ' '.join(text.getvalue().split()))
 
     @unittest.skipIf(os.name == 'nt', 'checks the behaviour on other systems')
     def test_other_systems_fail_cleanly_without_loading_windows_code(self):

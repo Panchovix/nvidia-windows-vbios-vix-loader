@@ -3,16 +3,14 @@
 [English](README.md) | Español
 
 Carga una VBIOS modificada en una GPU NVIDIA en Windows **sin flashearla**. La imagen se guarda en la clave
-de registro del driver de la GPU, donde el driver de NVIDIA busca una VBIOS de reemplazo al iniciar el
-dispositivo, y luego se reinicia la GPU. `verify` comprueba que el driver la esté usando y `unload` la quita.
-Nunca se escribe en el chip flash de la tarjeta.
+de registro del driver de la GPU, donde el driver de NVIDIA busca una VBIOS de reemplazo, y se aplica al
+reiniciar Windows. `verify` comprueba que el driver la esté usando y `unload` la quita. Nunca se escribe en el
+chip flash de la tarjeta.
 
-Funciona con los drivers NVIDIA 616.x, 617.x y 621.x (616.56 o más nuevo; probado con 617.42, 617.70 y 621.01).
-Podría dejar de funcionar en un driver futuro si NVIDIA decide cambiar o quitar el reemplazo por registro, así
-que usa **Verificar** después de cada actualización del driver. Con 621.01, los reemplazos cargados en una RTX 4090
-y una RTX A2000 se mantuvieron al actualizar el driver y, después de reiniciar Windows, Verificar mostró
-`override-active` en ambas. En una RTX 5070, Verificar mostró `override-active` para una VBIOS editada cargada con
-621.01 al reiniciar la GPU, sin reiniciar Windows. Turing todavía no está probada con 621.01.
+Funciona con los drivers NVIDIA 616.x, 617.x y 621.x (616.56 o más nuevo; probado con 621.01 en el modo
+predeterminado del driver, y con versiones hasta la 0.3.2 en 617.42 y 617.70). Podría dejar de funcionar
+en un driver futuro si NVIDIA decide cambiar o quitar el reemplazo por registro, así que usa **Verificar**
+después de cada actualización del driver.
 
 Gracias a **@pantsoftime** ([overclock.net](https://www.overclock.net)), cuyo trabajo original con
 `vbios_override` es la base de estos proyectos. Sin él, nada de esto habría sido posible.
@@ -36,25 +34,45 @@ de NVIDIA Corporation.
 | Valor | Tipo | Contenido |
 | --- | --- | --- |
 | `vbios` | REG_BINARY | La cadena de imágenes de la VBIOS de tu archivo: desde la imagen legacy hasta el final de la última imagen. Lo que haya antes o después en el archivo no se guarda. |
-| `EnableGpuFirmware` | REG_DWORD | `0x11` (firmware GSP activado, con respaldo permitido). |
-| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | El valor anterior de `EnableGpuFirmware`, guardado solo en el primer `load` para que `unload` pueda restaurarlo: `absent` si no existía, un DWORD como `0x00000012`, o, si no era un REG_DWORD de 4 bytes (otra herramienta o una edición a mano puede dejar ahí un REG_SZ, REG_QWORD, REG_BINARY o un DWORD de otro tamaño), una copia exacta de su tipo y sus bytes escrita como la escribe un archivo `.reg`, por ejemplo `hex(1):31,00,00,00`. |
+| `VixLoaderPreviousEnableGpuFirmware` | REG_SZ | El valor de `EnableGpuFirmware` de antes del primer `load`, guardado solo en el primer `load` para que `unload` pueda restaurarlo: `absent` si no existía, un DWORD como `0x00000012`, o, si no era un REG_DWORD de 4 bytes (otra herramienta o una edición a mano puede dejar ahí un REG_SZ, REG_QWORD, REG_BINARY o un DWORD de otro tamaño), una copia exacta de su tipo y sus bytes escrita como la escribe un archivo `.reg`, por ejemplo `hex(1):31,00,00,00`. |
 
-Además borra `romOverride00` a `romOverrideFF` si existen, hace flush de la clave, vuelve a leer los valores
-para comprobarlos y reinicia la GPU con `pnputil /restart-device`. Si el reinicio falla, reinicia Windows.
+Además borra `romOverride00` a `romOverrideFF` si existen, hace flush de la clave y vuelve a leer los valores
+para comprobarlos. Deja `EnableGpuFirmware` como está, salvo que vuelve a poner el valor que guardó una versión
+anterior que lo cambió a `0x11`.
 
-Son los mismos valores `vbios` y `EnableGpuFirmware` que escribe mVolt+ cuando carga un archivo de BIOS, así
-que una BIOS cargada con mVolt+ en la misma GPU queda reemplazada. Este proyecto no está afiliado a mVolt+.
-El resto de los valores de la clave no se tocan.
+Las versiones hasta la 0.3.2 también ponían `EnableGpuFirmware` en `0x11`, lo que activa el modo de firmware GSP
+del driver. En Windows el driver no usa ese modo por defecto en las tarjetas GeForce y RTX de estación de
+trabajo (incluidas las RTX 50), y en una RTX 4070 hacía que el driver de pantalla se reiniciara cada vez que se
+abría Apple Music, incluso sin un reemplazo. En su modo predeterminado, el driver lee el reemplazo por sí mismo.
 
-`unload` borra `vbios` y los registros `romOverride` que haya, restaura `EnableGpuFirmware` tal como estaba,
-con el mismo tipo (o lo borra si antes no existía), borra `VixLoaderPreviousEnableGpuFirmware` y reinicia la
-GPU. Si el valor guardado empieza con `hex(`, quita el reemplazo con la versión 0.3.2 o más nueva: las
-versiones anteriores no entienden esa forma, así que la borran y dejan `EnableGpuFirmware` en `0x11`.
+Reinicia Windows para aplicar el cambio, con **Reiniciar**, no Apagar: después de apagar, el inicio rápido de
+Windows retoma el estado anterior del driver. El driver mantiene la imagen hasta que Windows se reinicia, así
+que reiniciar solo la GPU no basta para aplicar ni quitar un reemplazo.
+
+mVolt+ guarda su archivo de BIOS en el mismo valor `vbios` (y pone `EnableGpuFirmware` en `0x11`), así que una
+BIOS cargada con mVolt+ en la misma GPU queda reemplazada. Si `EnableGpuFirmware` ya estaba en `0x11` antes del
+primer `load`, se queda así, y el modo de firmware GSP sigue activado. Para usar el modo predeterminado del
+driver, borra `EnableGpuFirmware` antes del primer `load`. Si el reemplazo ya está cargado, haz primero `unload`
+(que lo vuelve a poner en `0x11`), luego borra el valor, vuelve a hacer `load` y reinicia Windows. Este proyecto
+no está afiliado a mVolt+. El resto de los valores de la clave no se tocan.
+
+`unload` borra `vbios` y los registros `romOverride` que haya, restaura `EnableGpuFirmware` tal como estaba
+antes del primer `load`, con el mismo tipo (o lo borra si antes no existía), y borra
+`VixLoaderPreviousEnableGpuFirmware`. No reinicia la GPU: reinicia Windows. Si el valor guardado empieza con
+`hex(`, quita el reemplazo con la versión 0.3.2 o más nueva: las versiones anteriores no entienden esa forma,
+así que la borran y dejan `EnableGpuFirmware` en `0x11`.
 
 **No** flashea la tarjeta, no edita la VBIOS y no cambia por sí mismo relojes, ventiladores ni límites de
 potencia. `unload` deja la clave como estaba antes del primer `load`, salvo que un reemplazo escrito por otra
 herramienta (el `vbios` o los registros `romOverride` de mVolt+) no se restaura; en ese caso `load` lo avisa
 y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
+
+## Actualizar desde la 0.3.2 o anterior
+
+Las versiones hasta la 0.3.2 ponían `EnableGpuFirmware` en `0x11` en cada GPU con un reemplazo, lo que deja esas
+GPUs en modo de firmware GSP. Vuelve a cargar el mismo archivo con la 0.4.0 (esta versión restaura el valor
+guardado), o quita el reemplazo, y reinicia Windows. `status`, y el área de **Mensajes** de la ventana, muestran
+las GPUs que siguen con el modo de firmware GSP activado por una versión anterior.
 
 ## Avisos del antivirus
 
@@ -73,6 +91,17 @@ Por último, si no quieres usar este loader para una VBIOS editada, puedes usar 
 cuenta que su reemplazo de BIOS funciona sobre todo en Blackwell.
 
 ## Estado
+
+El modo predeterminado del driver, el estado que deja la 0.4.0 (`vbios` guardado y `EnableGpuFirmware` sin
+valor o en su valor predeterminado `0x12`), se probó con el driver 621.01 en una RTX 4090, una RTX 5070 y una
+RTX A2000 (la A2000 es la que da imagen): después de reiniciar Windows, Verificar confirmó el reemplazo en las
+tres, y los límites de potencia editados (máximos más altos y mínimos más bajos) se aplicaron y se mantuvieron
+bajo carga. En la A2000, Apple Music se abrió y funcionó sin que el driver se reiniciara. Turing, los portátiles y los drivers distintos de 621.01 todavía no están probados en el modo predeterminado. Si
+una GPU no arranca en el modo predeterminado, quita el reemplazo en Modo seguro (ver
+[Si la GPU no arranca](#si-la-gpu-no-arranca)) y abre un issue; la versión 0.3.2, que activa el modo de firmware
+GSP, sigue disponible.
+
+Resultados anteriores, con versiones hasta la 0.3.2 (modo de firmware GSP):
 
 | Familia | Estado |
 | --- | --- |
@@ -104,7 +133,7 @@ comandos.
 - **Blackwell**: la ROM que guarda Vix Editor después de editar, o cualquier volcado editado de un solo
   banco (por ejemplo, de GPU-Z). Si se rechaza por tener dos bancos, usa
   `.\nvbios.exe normalize editada.rom payload.bin`.
-- **Ada**: el firmware GSP carga como máximo 512 KiB contados desde la imagen legacy, así que hay que
+- **Ada**: el driver carga como máximo 512 KiB contados desde la imagen legacy, así que hay que
   reubicar el payload: `.\nvbios.exe normalize editada.rom payload.bin --representation ada-relocated-v2`.
   Los payloads más grandes se rechazan.
 - **Ampere GA102–GA107**: el mismo límite de 512 KiB. Usa
@@ -125,14 +154,11 @@ comandos.
 4. Haz clic en **Archivo VBIOS...** y elige el archivo. La ventana lo revisa de inmediato para la GPU elegida y
    muestra si es válido (familia, bytes a guardar, sha256) o por qué se rechaza.
 5. Haz clic en **Cargar** (lo mismo que `load`), lee la confirmación (GPU, archivo, cambios en el registro)
-   y acepta. Con **Reiniciar la GPU ahora** marcado, la GPU se reinicia (puede tardar hasta 45 segundos); si
-   lo desmarcas, reinicia Windows después. Si esta GPU es la que da imagen a tu pantalla, desmarca
-   **Reiniciar la GPU ahora** y reinicia Windows: reiniciar la GPU que da imagen puede dejarla sin señal
-   (pasó en una RTX 2070 SUPER, donde el mismo reemplazo funcionó después de reiniciar el equipo).
-6. Para comprobar que el driver está usando la VBIOS cargada, haz clic en **Verificar** (lo mismo que
-   `verify`, ver [Verificar](#verificar)).
-7. Para volver a la VBIOS propia de la tarjeta, elige la GPU y haz clic en **Quitar reemplazo** (lo mismo
-   que `unload`).
+   y acepta. Luego reinicia Windows (**Reiniciar**, no Apagar) para aplicar el reemplazo.
+6. Después de reiniciar, haz clic en **Verificar** para comprobar que el driver está usando la VBIOS cargada
+   (lo mismo que `verify`, ver [Verificar](#verificar)).
+7. Para volver a la VBIOS propia de la tarjeta, elige la GPU, haz clic en **Quitar reemplazo** (lo mismo que
+   `unload`) y reinicia Windows.
 
 Cada resultado y advertencia queda también en el área de **Mensajes**. La ventana sale en español si
 Windows está en español; el menú **Idioma**, o `vbios-loader-gui.exe --lang es` / `--lang en`, lo cambia. Sale
@@ -151,25 +177,25 @@ esa carpeta.
 # Muestra lo que se escribiría, sin escribir nada.
 .\vbios-loader.exe load .\payload.bin --gpu 0 --dry-run
 
-# Guarda la VBIOS de reemplazo y reinicia la GPU.
+# Guarda la VBIOS de reemplazo; luego reinicia Windows para aplicarla.
 .\vbios-loader.exe load .\payload.bin --gpu 0
 
-# Comprueba que el driver está usando el reemplazo guardado.
+# Después de reiniciar, comprueba que el driver está usando el reemplazo guardado.
 .\vbios-loader.exe verify --gpu 0
 
-# La quita y reinicia la GPU.
+# La quita; luego reinicia Windows.
 .\vbios-loader.exe unload --gpu 0
 ```
 
 - Elige la GPU con `--gpu ÍNDICE` (el que muestra `status`) o con `--pci BUS:DEV.FN` (por ejemplo
   `--pci 01:00.0`). Si hay una sola GPU NVIDIA, no hace falta elegirla.
-- `--no-restart` escribe los valores sin reiniciar la GPU; se aplican en el siguiente reinicio.
+- `--no-restart` no hace nada: el loader ya no reinicia la GPU, y la opción se sigue aceptando para que los
+  scripts anteriores sigan funcionando.
 - `--json` entrega la salida en formato para máquinas.
 - Códigos de salida: `0` listo, `1` rechazado o fallido (no se escribió nada salvo que el mensaje diga lo
-  contrario), `2` argumentos de línea de comandos no válidos (no se escribió nada), `3` valores escritos pero
-  falló el reinicio de la GPU (reinicia Windows), `4` `verify` encontró que el driver no está usando el
-  reemplazo guardado (o sus dos lecturas no coincidieron), `70` error interno inesperado, `130` interrumpido
-  (Ctrl+C).
+  contrario), `2` argumentos de línea de comandos no válidos (no se escribió nada), `4` `verify` encontró que
+  el driver no está usando el reemplazo guardado (o sus dos lecturas no coincidieron), `70` error interno
+  inesperado, `130` interrumpido (Ctrl+C).
 
 El reemplazo queda en la clave de registro de la GPU hasta que lo quites, así que se vuelve a aplicar en
 cada inicio de Windows. Una instalación limpia o una actualización del driver puede volver a crear la clave
@@ -183,17 +209,17 @@ Desde el código fuente, con Python 3.11 o más nuevo: `pip install .` y luego `
 ## Verificar
 
 **Verificar** en la ventana, o `verify` en la línea de comandos, lee mediante NvAPI la imagen de VBIOS que
-está ejecutando el firmware GSP del driver, dos veces, y la compara byte a byte con el reemplazo guardado en
-el registro. No escribe nada y no necesita permisos de administrador. El resultado (`state` en `--json`) es
-uno de estos:
+está usando el driver, dos veces, y la compara byte a byte con el reemplazo guardado en el registro. No
+escribe nada y no necesita permisos de administrador. Después de cargar o quitar un reemplazo, reinicia
+Windows antes de comprobar. El resultado (`state` en `--json`) es uno de estos:
 
 - `override-active`: la imagen en uso es el reemplazo guardado, así que el driver lo aceptó.
-- `override-not-active`: son distintas, y se muestra el primer offset que difiere. Justo después de cargarlo
-  sin reiniciar la GPU es lo esperado; si no, lo más probable es que el driver haya rechazado el reemplazo y
-  esté usando la VBIOS propia de la tarjeta.
+- `override-not-active`: son distintas, y se muestra el primer offset que difiere. Justo después de cargarlo,
+  antes de reiniciar Windows, es lo esperado; si no, lo más probable es que el driver haya rechazado el
+  reemplazo y esté usando la VBIOS propia de la tarjeta.
 - `no-override`: no hay nada guardado, así que el driver debería usar la VBIOS propia de la tarjeta (se
-  muestran su tamaño y su sha256). Un reemplazo quitado sigue en uso hasta reiniciar la GPU o Windows, y
-  Verificar no puede distinguirlo, así que reinicia antes de comprobar que se quitó.
+  muestran su tamaño y su sha256). Un reemplazo quitado sigue en uso hasta reiniciar Windows, y Verificar no
+  puede distinguirlo, así que reinicia Windows antes de comprobar que se quitó.
 - `unstable`: las dos lecturas no coinciden; inténtalo de nuevo.
 
 NvAPI entrega como máximo 1.024.000 bytes, así que un reemplazo más grande se compara solo en esos bytes: el
@@ -206,9 +232,6 @@ error lo indica. No funciona dentro de una máquina virtual con una GPU paravirt
 Prueba primero en una GPU que **no** esté conectada a tu pantalla (usa los gráficos integrados u otra
 tarjeta para el monitor), así siempre podrás ejecutar `unload`.
 
-Si la pantalla queda en negro justo después de cargar con **Reiniciar la GPU ahora**, primero reinicia
-Windows: el reemplazo queda guardado y puede funcionar después de un reinicio completo.
-
 Si Windows no da imagen o la GPU aparece con error en el Administrador de dispositivos:
 
 1. Arranca en Modo seguro: mantén Shift mientras haces clic en Reiniciar y luego Solucionar problemas →
@@ -216,21 +239,21 @@ Si Windows no da imagen o la GPU aparece con error en el Administrador de dispos
    escritorio, apaga el PC durante el arranque dos o tres veces (o arranca desde un medio de instalación de
    Windows → Reparar el equipo) para llegar al mismo menú Solucionar problemas. En Modo seguro el driver de
    NVIDIA no se carga, así que la pantalla funciona.
-2. Abre `vbios-loader-gui.exe`, elige la GPU, desmarca **Reiniciar la GPU ahora** y haz clic en **Quitar
-   reemplazo**; o, en un PowerShell elevado, ejecuta `.\vbios-loader.exe unload --gpu 0 --no-restart` (con
-   el índice de tu GPU según `status`). Luego reinicia Windows normalmente.
+2. Abre `vbios-loader-gui.exe`, elige la GPU y haz clic en **Quitar reemplazo**; o, en un PowerShell
+   elevado, ejecuta `.\vbios-loader.exe unload --gpu 0` (con el índice de tu GPU según `status`). Luego
+   reinicia Windows normalmente.
 3. Si eso no funciona, abre `regedit` y ve a
    `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}`.
    Abre la subclave numerada cuyo `DriverDesc` sea tu GPU (`status` la muestra como `driver_key`). Si
    `VixLoaderPreviousEnableGpuFirmware` empieza con `hex(`, usa el paso 4. Si no, borra `vbios` y vuelve a
    poner en `EnableGpuFirmware` el valor guardado, o borra `EnableGpuFirmware` si el valor guardado es
-   `absent`. Luego borra `VixLoaderPreviousEnableGpuFirmware` y reinicia.
+   `absent`. Luego borra `VixLoaderPreviousEnableGpuFirmware` y reinicia Windows.
 4. Si el valor guardado empieza con `hex(`, `EnableGpuFirmware` no era un REG_DWORD de 4 bytes antes del
    primer `load` y ese texto es una copia exacta en la notación de los archivos `.reg`. Lo más fácil para
    volver a ponerlo es un archivo `.reg` en lugar del paso 3: guarda estas líneas en el Bloc de notas como
    `restore.reg`, cambiando `NNNN` por el número de la subclave y el texto después de `"EnableGpuFirmware"=`
    por el valor guardado. Haz doble clic en el archivo (o ejecuta `reg import restore.reg` en un PowerShell
-   elevado) y reinicia. También borra `vbios` y el valor guardado.
+   elevado) y reinicia Windows. También borra `vbios` y el valor guardado.
 
    ```
    Windows Registry Editor Version 5.00

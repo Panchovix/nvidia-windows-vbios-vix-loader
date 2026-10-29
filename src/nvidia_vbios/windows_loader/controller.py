@@ -24,12 +24,11 @@ STRINGS = {
         'file_button': 'VBIOS file...',
         'file_types': 'VBIOS files',
         'all_files': 'All files',
-        'restart': 'Restart the GPU now',
         'load': 'Load',
         'remove': 'Remove override',
         'verify': 'Verify',
         'messages': 'Messages',
-        'working': 'Working... restarting the GPU can take up to 45 seconds.',
+        'working': 'Working...',
         'verifying': 'Reading the VBIOS the driver is running...',
         'override_none': 'none',
         'override_loaded': 'loaded: {size} bytes, sha256 {sha}...',
@@ -55,34 +54,29 @@ STRINGS = {
                           'Registry changes in the GPU\'s driver key:\n{steps}',
         'other_tool': 'This GPU has an override written by another tool (for example mVolt+). It is replaced and '
                       'will not be restored.',
-        'firmware_raw_confirm': 'EnableGpuFirmware holds a {type} value (set by another tool or by hand). Load saves '
-                                'it exactly as it is and replaces it with the DWORD value the override needs; Remove '
-                                'override puts it back.',
-        'firmware_raw_saved': 'EnableGpuFirmware held a {type} value (set by another tool or by hand). It was saved '
-                              'exactly as it was and replaced by the DWORD value the override needs; Remove override '
-                              'puts it back.',
-        'dword_size': '{size}-byte REG_DWORD',
-        'will_restart': 'The GPU is restarted afterwards; the screens on it can go black for a few seconds. If '
-                        'they stay black, restart Windows: the override stays stored.',
-        'no_restart': 'The GPU is not restarted: restart Windows to apply the change.',
+        'firmware_restored': 'EnableGpuFirmware goes back to its value before the first load: {saved}. Loader 0.3.2 '
+                             "or older set it to 0x11, which turns on the driver's GSP firmware mode; this version no "
+                             'longer turns that mode on.',
+        'firmware_gsp_kept': 'GSP firmware mode stays on because EnableGpuFirmware was already 0x11 before the first '
+                             "load (for example set by mVolt+). For the driver's default mode, remove the override "
+                             '(Remove override puts 0x11 back), delete EnableGpuFirmware, load the file again and '
+                             'restart Windows.',
+        'gsp_old_loader': 'GPU {index}: GSP firmware mode is on (set by loader 0.3.2 or older). Load the VBIOS file '
+                          'again with this version (or remove the override) and restart Windows.',
+        'applies_on_restart': 'The change applies when you restart Windows (Restart, not Shut down).',
         'risk': 'A modified VBIOS can damage hardware. If the GPU does not start, see "If the GPU does not start" '
                 'in the README: boot into Safe Mode and remove the override.',
         'loaded': 'GPU {index}: VBIOS loaded, {size} bytes, sha256 {sha256}.',
         'removed': 'GPU {index}: override removed.',
-        'restarted': 'GPU restarted.',
-        'not_restarted': 'GPU not restarted. Restart Windows to apply the change.',
-        'restart_failed': 'The values are written, but the GPU restart failed ({detail}). Restart Windows to '
-                          'apply the change.',
-        'pnputil_code': 'pnputil exit code {code}',
-        'pnputil_timeout': 'pnputil did not finish',
+        'restart_windows': 'Restart Windows to apply the change (Restart, not Shut down).',
         'verify_override-active': 'GPU {index}: the driver is using the loaded override (verified byte by byte).',
         'verify_override-active-prefix': 'GPU {index}: the first {compared} bytes the driver is running match the '
                                          'loaded override; the rest cannot be read back.',
         'verify_override-not-active': 'GPU {index}: the driver is NOT using the stored override. If you just '
-                                      'loaded it, restart the GPU or Windows; otherwise the driver may have rejected '
-                                      "it and is running the card's own VBIOS.",
+                                      'loaded it, restart Windows; otherwise the driver may have rejected it and is '
+                                      "running the card's own VBIOS.",
         'verify_no-override': "GPU {index}: no override stored: the driver should be using the card's own VBIOS. "
-                              'If you just removed one, restart the GPU or Windows first.',
+                              'If you just removed one, restart Windows first.',
         'verify_unstable': 'GPU {index}: two reads of the running VBIOS differ; try again.',
         'verify_prefix': 'Only the first {compared} bytes were compared: NvAPI returns at most that many, and the '
                          'override has {size}.',
@@ -113,12 +107,11 @@ STRINGS = {
         'file_button': 'Archivo VBIOS...',
         'file_types': 'Archivos VBIOS',
         'all_files': 'Todos los archivos',
-        'restart': 'Reiniciar la GPU ahora',
         'load': 'Cargar',
         'remove': 'Quitar reemplazo',
         'verify': 'Verificar',
         'messages': 'Mensajes',
-        'working': 'Trabajando... reiniciar la GPU puede tardar hasta 45 segundos.',
+        'working': 'Trabajando...',
         'verifying': 'Leyendo la VBIOS que está usando el driver...',
         'override_none': 'ninguno',
         'override_loaded': 'cargado: {size} bytes, sha256 {sha}...',
@@ -144,34 +137,30 @@ STRINGS = {
                           'Cambios en la clave de registro del driver de la GPU:\n{steps}',
         'other_tool': 'Esta GPU tiene un reemplazo escrito por otra herramienta (por ejemplo mVolt+). Se reemplaza '
                       'y no se va a restaurar.',
-        'firmware_raw_confirm': 'EnableGpuFirmware tiene un valor {type} (puesto por otra herramienta o a mano). '
-                                'Cargar lo guarda tal cual y lo cambia por el valor DWORD que necesita el reemplazo; '
-                                'Quitar reemplazo lo vuelve a poner.',
-        'firmware_raw_saved': 'EnableGpuFirmware tenía un valor {type} (puesto por otra herramienta o a mano). Se '
-                              'guardó tal cual y se cambió por el valor DWORD que necesita el reemplazo; Quitar '
-                              'reemplazo lo vuelve a poner.',
-        'dword_size': 'REG_DWORD de {size} bytes',
-        'will_restart': 'Después se reinicia la GPU; las pantallas conectadas a ella pueden quedar en negro unos '
-                        'segundos. Si siguen en negro, reinicia Windows: el reemplazo queda guardado.',
-        'no_restart': 'La GPU no se reinicia: reinicia Windows para aplicar el cambio.',
+        'firmware_restored': 'EnableGpuFirmware vuelve a su valor de antes de la primera carga: {saved}. El loader '
+                             '0.3.2 o anterior lo puso en 0x11, lo que activa el modo de firmware GSP del driver; esta '
+                             'versión ya no activa ese modo.',
+        'firmware_gsp_kept': 'El modo de firmware GSP sigue activado porque EnableGpuFirmware ya estaba en 0x11 antes '
+                             'de la primera carga (por ejemplo, puesto por mVolt+). Para usar el modo predeterminado '
+                             'del driver, quita el reemplazo (Quitar reemplazo lo vuelve a poner en 0x11), borra '
+                             'EnableGpuFirmware, vuelve a cargar el archivo y reinicia Windows.',
+        'gsp_old_loader': 'GPU {index}: el modo de firmware GSP está activado (lo activó el loader 0.3.2 o anterior). '
+                          'Vuelve a cargar el archivo VBIOS con esta versión (o quita el reemplazo) y reinicia '
+                          'Windows.',
+        'applies_on_restart': 'El cambio se aplica cuando reinicies Windows (Reiniciar, no Apagar).',
         'risk': 'Una VBIOS modificada puede dañar el hardware. Si la GPU no arranca, revisa "Si la GPU no arranca" '
                 'en el README: arranca en Modo seguro y quita el reemplazo.',
         'loaded': 'GPU {index}: VBIOS cargada, {size} bytes, sha256 {sha256}.',
         'removed': 'GPU {index}: reemplazo quitado.',
-        'restarted': 'GPU reiniciada.',
-        'not_restarted': 'GPU sin reiniciar. Reinicia Windows para aplicar el cambio.',
-        'restart_failed': 'Los valores quedaron escritos, pero falló el reinicio de la GPU ({detail}). Reinicia '
-                          'Windows para aplicar el cambio.',
-        'pnputil_code': 'pnputil terminó con código {code}',
-        'pnputil_timeout': 'pnputil no terminó',
+        'restart_windows': 'Reinicia Windows para aplicar el cambio (Reiniciar, no Apagar).',
         'verify_override-active': 'GPU {index}: el driver está usando el reemplazo cargado (verificado byte a byte).',
         'verify_override-active-prefix': 'GPU {index}: los primeros {compared} bytes de la VBIOS en uso coinciden con '
                                          'el reemplazo cargado; el resto no se puede leer.',
         'verify_override-not-active': 'GPU {index}: el driver NO está usando el reemplazo guardado. Si lo acabas de '
-                                      'cargar, reinicia la GPU o Windows; si no, puede que el driver lo haya '
-                                      'rechazado y esté usando la VBIOS de la tarjeta.',
+                                      'cargar, reinicia Windows; si no, puede que el driver lo haya rechazado y esté '
+                                      'usando la VBIOS de la tarjeta.',
         'verify_no-override': 'GPU {index}: sin reemplazo guardado: el driver debería usar la VBIOS de la tarjeta. '
-                              'Si acabas de quitar uno, reinicia la GPU o Windows primero.',
+                              'Si acabas de quitar uno, reinicia Windows primero.',
         'verify_unstable': 'GPU {index}: dos lecturas de la VBIOS en uso dieron resultados distintos; inténtalo de '
                            'nuevo.',
         'verify_prefix': 'Solo se compararon los primeros {compared} bytes: NvAPI entrega como máximo esa cantidad, y '
@@ -241,7 +230,6 @@ class Controller:
         self.path = self.data = None
         self.file_error = None
         self.validation = None        # ('ok', dry-run report) or ('error', reason); None until both are chosen
-        self.restart = True
         self.busy = False
 
     # -- state --------------------------------------------------------------------------------------------
@@ -254,6 +242,8 @@ class Controller:
         except (LoaderError, OSError) as exc:
             self.gpus = []
             lines.append(self.text['status_failed'].format(message=exc))
+        lines += [self.text['gsp_old_loader'].format(index=gpu['index']) for gpu in self.gpus
+                  if (gpu['override'] or {}).get('gsp_forced_by_old_loader')]
         if self.selected is None and self.gpus:     # only before any choice: a GPU that went away stays chosen
             self.selected = self.gpus[0]['instance_id']
         self.validate()
@@ -369,16 +359,14 @@ class Controller:
         """Verify only reads (the registry and NvAPI), so it needs no administrator rights."""
         return not self.busy and self.gpu is not None
 
-    def _restart_note(self):
-        return self.text['will_restart'] if self.restart else self.text['no_restart']
-
-    def _load_notes(self, report, firmware_key):
+    def _load_notes(self, report):
         """The window's own texts for the notes of a load report."""
-        notes = [self.text['other_tool']] if report.get('replaces_other_override') else []
-        raw = report.get('raw_backup')
-        if raw:
-            kind = self.text['dword_size'].format(size=raw['size']) if raw['type'] == 'REG_DWORD' else raw['type']
-            notes.append(self.text[firmware_key].format(type=kind))
+        t = self.text
+        notes = [t['other_tool']] if report.get('replaces_other_override') else []
+        if report.get('restores_firmware'):
+            notes.append(t['firmware_restored'].format(saved=report['restores_firmware']))
+        if report.get('keeps_gsp_firmware_mode'):
+            notes.append(t['firmware_gsp_kept'])
         return notes
 
     def _steps(self, report):
@@ -395,8 +383,8 @@ class Controller:
         parts = [t['confirm_load'].format(index=gpu['index'], name=gpu['name'], location=gpu['location'] or '?',
                                           path=self.path, size=payload['size'], family=payload['family'],
                                           sha256=payload['sha256'], steps=self._steps(report))]
-        parts += self._load_notes(report, 'firmware_raw_confirm')
-        parts += [self._restart_note(), t['risk']]
+        parts += self._load_notes(report)
+        parts += [t['applies_on_restart'], t['risk']]
         return '\n\n'.join(parts)
 
     def confirm_remove(self):
@@ -411,7 +399,7 @@ class Controller:
                                             steps=self._steps(report))]
         if report.get('message'):
             parts.append(t['note'].format(message=report['message']))
-        parts.append(self._restart_note())
+        parts.append(t['applies_on_restart'])
         return '\n\n'.join(parts), None
 
     # -- actions (run in a worker thread while busy) ------------------------------------------------------------
@@ -429,33 +417,21 @@ class Controller:
         if action == 'verify':
             return self._verify()
         if action == 'load':
-            report = load(self.platform, self.data, instance_id=self.selected, restart=self.restart)
+            report = load(self.platform, self.data, instance_id=self.selected)
         else:
-            report = unload(self.platform, instance_id=self.selected, restart=self.restart)
+            report = unload(self.platform, instance_id=self.selected)
         index, lines = report['gpu']['index'], []
         if action == 'load':
             payload = report['payload']
             lines.append(t['loaded'].format(index=index, size=payload['size'], sha256=payload['sha256']))
-            lines += self._load_notes(report, 'firmware_raw_saved')
+            lines += self._load_notes(report)
         else:
             if report['steps']:
                 lines.append(t['removed'].format(index=index))
             if report.get('message'):
                 lines.append(t['note'].format(message=report['message']))
-        restart = report.get('restart')
-        if restart is None:
-            return True, lines
-        if not restart['requested']:
-            lines.append(t['not_restarted'])
-        elif restart['ok']:
-            lines.append(t['restarted'])
-        else:
-            code = restart.get('exit_code')
-            detail = t['pnputil_timeout'] if code is None else t['pnputil_code'].format(code=code)
-            lines.append(t['restart_failed'].format(detail=detail))
-            if restart.get('output'):
-                lines.append(restart['output'])
-            return False, lines
+        if report.get('next_step'):
+            lines.append(t['restart_windows'])
         return True, lines
 
     def _verify(self):

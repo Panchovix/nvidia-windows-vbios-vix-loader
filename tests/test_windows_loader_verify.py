@@ -162,13 +162,13 @@ class VerifyTests(unittest.TestCase):
     def verify(self, values=None, image=b'', **options):
         fake, key = platform(values=values, image=image, admin=False, **options)
         report = ops.verify(fake)
-        self.assertEqual((key.calls, fake.writable_opens, fake.restarted), ([], 0, []))    # read-only, no admin
+        self.assertEqual((key.calls, fake.writable_opens), ([], 0))    # read-only, no admin
         self.assertEqual(len(fake.reads), 2)
         return report
 
     def test_the_loaded_override_is_active(self):
         fake, key = platform(image=chain(RTX_5070))
-        ops.load(fake, rom(RTX_5070), restart=False)
+        ops.load(fake, rom(RTX_5070))
         report = ops.verify(fake)
         self.assertEqual((report['state'], report['match'], report['compared'], report['first_difference']),
                          ('override-active', True, 'full', None))
@@ -186,8 +186,9 @@ class VerifyTests(unittest.TestCase):
         report = self.verify({ops.VBIOS: (REG_BINARY, stored)}, running)
         self.assertEqual((report['state'], report['match'], report['first_difference']),
                          ('override-not-active', False, 0x123))
-        self.assertIn('restart the GPU or Windows', report['message'])
-        self.assertIn("running the card's own VBIOS", report['message'])
+        self.assertEqual(report['message'], 'The driver is NOT using the stored override (first difference at offset '
+                                            "0x123). If it was just loaded, restart Windows; otherwise the driver may "
+                                            "have rejected it and is running the card's own VBIOS.")
         report = self.verify({ops.VBIOS: (REG_BINARY, stored)}, stored[:1024])
         self.assertEqual((report['state'], report['first_difference']), ('override-not-active', 1024))
 
@@ -200,12 +201,13 @@ class VerifyTests(unittest.TestCase):
 
     def test_a_removed_override_still_running_gets_the_restart_hint(self):
         fake, _ = platform(image=chain(RTX_5070))
-        ops.load(fake, rom(RTX_5070), restart=False)
-        ops.unload(fake, restart=False)                       # the firmware keeps the override until a restart
+        ops.load(fake, rom(RTX_5070))
+        ops.unload(fake)                       # the driver keeps the removed image until Windows restarts
         report = ops.verify(fake)
         self.assertEqual(report['state'], 'no-override')
         self.assertNotIn('the driver is running', report['message'])
-        self.assertIn('If one was just removed, restart the GPU or Windows first.', report['message'])
+        self.assertEqual(report['message'], "No override is stored, so the driver should be running the card's own "
+                                            'VBIOS. If one was just removed, restart Windows first.')
         report = self.verify({'romOverride00': (REG_BINARY, b'r'), ops.VBIOS: (REG_SZ, 'text')}, b'card image')
         self.assertEqual(report['state'], 'no-override')
         self.assertIn('romOverride records are stored too', report['message'])
@@ -259,7 +261,7 @@ class VerifyCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('  running VBIOS (NvAPI): 10 bytes, sha256 ', out)
         self.assertIn('  stored override: none', out)
-        self.assertTrue(out.endswith('If one was just removed, restart the GPU or Windows first.\n'))
+        self.assertTrue(out.endswith('If one was just removed, restart Windows first.\n'))
         key.values[ops.VBIOS] = (REG_BINARY, b'override')
         code, out, _ = self.run_cli(['verify', '--gpu', '0', '--json'], fake)
         report = json.loads(out)

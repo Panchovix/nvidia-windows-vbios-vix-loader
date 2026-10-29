@@ -1,7 +1,7 @@
 """vbios-loader: load a modified VBIOS on Windows through the NVIDIA driver's registry override.
 
-Nothing is flashed: the image is stored in the GPU's driver registry key and used by the
-driver when the device starts. unload removes it; verify checks that the driver is running it.
+Nothing is flashed: the image is stored in the GPU's driver registry key, and the driver uses it
+after the next Windows restart. unload removes it; verify checks that the driver is running it.
 """
 from __future__ import annotations
 import argparse
@@ -29,8 +29,9 @@ def parser():
     commands = root.add_subparsers(dest='command', required=True)
     p = commands.add_parser('status', help='list NVIDIA GPUs and their override state')
     p.add_argument('--json', action='store_true', help='machine-readable output')
-    for name, text in (('load', 'store a VBIOS override for one GPU and restart it'),
-                       ('unload', 'remove the override and restore the previous firmware setting'),
+    for name, text in (('load', 'store a VBIOS override for one GPU; it applies after restarting Windows'),
+                       ('unload', 'remove the override and restore the previous firmware setting; it applies after '
+                                  'restarting Windows'),
                        ('verify', 'compare the VBIOS the driver is running with the stored override')):
         p = commands.add_parser(name, help=text)
         if name == 'load':
@@ -39,7 +40,8 @@ def parser():
         p.add_argument('--pci', metavar='BUS:DEV.FN', help='PCI location as shown by status, for example 01:00.0')
         if name != 'verify':
             p.add_argument('--dry-run', action='store_true', help='show the registry changes without making them')
-            p.add_argument('--no-restart', action='store_true', help='do not restart the device afterwards')
+            p.add_argument('--no-restart', action='store_true',
+                           help='no effect, kept for compatibility: the loader no longer restarts the GPU')
         p.add_argument('--json', action='store_true', help='machine-readable output')
     return root
 
@@ -52,6 +54,9 @@ def _override_lines(override):
     lines.append(f"  EnableGpuFirmware: {override['enable_gpu_firmware'] or 'not set'}"
                  + (f" (saved previous value: {override['saved_previous_enable_gpu_firmware']})"
                     if override['saved_previous_enable_gpu_firmware'] else ''))
+    if override['gsp_forced_by_old_loader']:
+        lines.append('  GSP firmware mode: on, set by loader 0.3.2 or older; load the file again with this version (or '
+                     'unload it) and restart Windows.')
     if override['rom_override_records']:
         lines.append(f"  romOverride records: {len(override['rom_override_records'])}")
     return lines
@@ -78,7 +83,7 @@ def _human_status(report):
 
 
 def step_text(step):
-    """One registry change of a report, for example 'set EnableGpuFirmware = REG_DWORD 0x11'."""
+    """One registry change of a report, for example 'set EnableGpuFirmware = REG_DWORD 0x12'."""
     detail = (f"{step['size']} bytes, sha256 {step['sha256']}" if 'size' in step else step.get('value', ''))
     if len(detail) > 100:      # a long saved value; --json keeps all of it
         detail = f'{detail[:80]}... ({len(detail)} characters)'
@@ -98,8 +103,8 @@ def _human_change(report):
         lines.append(report['message'])
     if report['dry_run']:
         lines.append('Dry run: nothing was written.')
-    elif report.get('restart'):
-        lines.append(report['restart']['message'])
+    elif report.get('next_step'):
+        lines.append(report['next_step'])
     return '\n'.join(lines)
 
 
@@ -132,7 +137,7 @@ def main(argv=None, platform=None):
             ok = report['state'] in VERIFY_OK
             print(json.dumps(dict(report, ok=ok), indent=2) if args.json else _human_verify(report))
             return 0 if ok else 4
-        common = dict(gpu=args.gpu, pci=args.pci, dry_run=args.dry_run, restart=not args.no_restart)
+        common = dict(gpu=args.gpu, pci=args.pci, dry_run=args.dry_run)     # --no-restart: no effect
         if args.command == 'load':
             try:
                 data = args.payload.read_bytes()
@@ -146,12 +151,11 @@ def main(argv=None, platform=None):
             print(json.dumps({'ok': False, 'error': str(exc)}, indent=2))
         print(f'{PROG}: {exc}', file=sys.stderr)
         return 1
-    restart_failed = (report.get('restart') or {}).get('ok') is False
     if args.json:
-        print(json.dumps(dict(report, ok=not restart_failed), indent=2))
+        print(json.dumps(dict(report, ok=True), indent=2))
     else:
         print(_human_change(report))
-    return 3 if restart_failed else 0
+    return 0
 
 
 if __name__ == '__main__':

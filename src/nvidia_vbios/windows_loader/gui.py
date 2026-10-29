@@ -45,9 +45,6 @@ def style_dark(style, p):
     style.map('.', foreground=[('disabled', p['disabled'])], background=[('disabled', p['bg'])])
     style.configure('TButton', background=p['button'], padding=(10, 3))
     style.map('TButton', background=[('disabled', p['bg']), ('pressed', p['pressed']), ('active', p['active'])])
-    style.configure('TCheckbutton', indicatorbackground=p['field'], indicatorforeground=p['fg'])
-    style.map('TCheckbutton', background=[('active', p['bg'])],
-              indicatorbackground=[('disabled', p['bg']), ('selected', p['select'])])
     style.map('TEntry', fieldbackground=[('readonly', p['field'])], foreground=[('readonly', p['fg'])])
     style.configure('Treeview', background=p['field'], fieldbackground=p['field'], foreground=p['fg'])
     style.map('Treeview', background=[('selected', p['select'])], foreground=[('selected', p['select_fg'])])
@@ -162,19 +159,15 @@ class Window:
 
         actions = ttk.Frame(root, padding=(8, 8, 8, 0))
         actions.grid(row=4, column=0, sticky='ew')
-        actions.columnconfigure(1, weight=1)
-        self.restart = tk.BooleanVar(value=controller.restart)
-        self.restart_box = ttk.Checkbutton(actions, text=t['restart'], variable=self.restart,
-                                           command=lambda: setattr(self.c, 'restart', self.restart.get()))
-        self.restart_box.grid(row=0, column=0, sticky='w')
+        actions.columnconfigure(0, weight=1)
         self.working = ttk.Label(actions, text='')
-        self.working.grid(row=0, column=1, sticky='w', padx=12)
+        self.working.grid(row=0, column=0, sticky='w')
         self.load_button = ttk.Button(actions, text=t['load'], command=self.load)
-        self.load_button.grid(row=0, column=2, padx=(0, 6))
+        self.load_button.grid(row=0, column=1, padx=(0, 6))
         self.remove_button = ttk.Button(actions, text=t['remove'], command=self.remove)
-        self.remove_button.grid(row=0, column=3)
+        self.remove_button.grid(row=0, column=2)
         self.verify_button = ttk.Button(actions, text=t['verify'], command=self.verify)
-        self.verify_button.grid(row=0, column=4, padx=(6, 0))
+        self.verify_button.grid(row=0, column=3, padx=(6, 0))
 
         messages = ttk.LabelFrame(root, text=t['messages'], padding=6)
         messages.grid(row=5, column=0, sticky='nsew', padx=8, pady=8)
@@ -248,7 +241,7 @@ class Window:
         ok, text = c.validation_text()
         self.validation.configure(text=text, foreground=self.palette['ok' if ok else 'bad'])
         idle = ['!disabled'] if not c.busy else ['disabled']
-        for widget in (self.refresh_button, self.file_button, self.restart_box):
+        for widget in (self.refresh_button, self.file_button):
             widget.state(idle)
         self.load_button.state(['!disabled'] if c.can_load() else ['disabled'])
         self.remove_button.state(['!disabled'] if c.can_remove() else ['disabled'])

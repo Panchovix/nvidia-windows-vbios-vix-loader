@@ -110,93 +110,70 @@ class ControllerTests(unittest.TestCase):
         c.choose_file(path)
         text = c.confirm_load()
         for part in ('GPU 0 (GPU 0, PCI 01:00.0)', f'File: {path}', f'Stored: {len(chain(RTX_5070))} bytes',
-                     'set vbios = REG_BINARY', 'set EnableGpuFirmware = REG_DWORD 0x11',
-                     'set VixLoaderPreviousEnableGpuFirmware = REG_SZ 0x00000011', 'another tool',
-                     'The GPU is restarted', 'If the GPU does not start'):
+                     'set vbios = REG_BINARY', 'set VixLoaderPreviousEnableGpuFirmware = REG_SZ 0x00000011',
+                     'another tool', STRINGS['en']['firmware_gsp_kept'],
+                     'The change applies when you restart Windows (Restart, not Shut down).',
+                     'If the GPU does not start'):
             self.assertIn(part, text)
-        c.restart = False
-        self.assertIn('restart Windows to apply', c.confirm_load())
+        self.assertNotIn('set EnableGpuFirmware', text)
         question, error = c.confirm_remove()
         self.assertIsNone(error)
         self.assertIn('delete vbios', question)
         self.assertIn('Note: EnableGpuFirmware was not saved by this tool', question)
+        self.assertTrue(question.endswith('\n\nThe change applies when you restart Windows (Restart, not Shut down).'))
         self.assertEqual(key.calls, [])
 
     def test_load_and_remove_results(self):
-        fake, key = platform(restart=(0, ''))
+        fake, key = platform()
         c = self.controller(fake)
+        self.assertFalse(hasattr(c, 'restart'))         # no "restart the GPU" choice any more
         c.choose_file(self.file(rom(RTX_5070)))
         ok, lines = c.run('load')
         self.assertTrue(ok)
-        self.assertEqual(lines[1], 'GPU restarted.')
+        self.assertEqual(lines[1:], ['Restart Windows to apply the change (Restart, not Shut down).'])
         self.assertTrue(lines[0].startswith(f'GPU 0: VBIOS loaded, {len(chain(RTX_5070))} bytes'))
         self.assertEqual(key.values[ops.VBIOS], (REG_BINARY, chain(RTX_5070)))
         c.refresh()
         self.assertTrue(c.can_remove())
         self.assertTrue(c.rows()[0][5].startswith('loaded: '))
-        c.restart = False
         ok, lines = c.run('unload')
         self.assertEqual((ok, lines), (True, ['GPU 0: override removed.',
-                                              'GPU not restarted. Restart Windows to apply the change.']))
+                                              'Restart Windows to apply the change (Restart, not Shut down).']))
         self.assertEqual(key.values, UNRELATED)
-        self.assertEqual(len(fake.restarted), 1)
 
     def test_a_non_dword_enable_gpu_firmware_is_saved_and_put_back_in_both_languages(self):
-        texts = {
-            'en': ('EnableGpuFirmware holds a REG_QWORD value (set by another tool or by hand). Load saves it exactly '
-                   'as it is and replaces it with the DWORD value the override needs; Remove override puts it back.',
-                   'EnableGpuFirmware held a REG_QWORD value (set by another tool or by hand). It was saved exactly as '
-                   'it was and replaced by the DWORD value the override needs; Remove override puts it back.',
-                   'set EnableGpuFirmware = REG_QWORD 0x11', 'GPU 0: override removed.'),
-            'es': ('EnableGpuFirmware tiene un valor REG_QWORD (puesto por otra herramienta o a mano). Cargar lo '
-                   'guarda tal cual y lo cambia por el valor DWORD que necesita el reemplazo; Quitar reemplazo lo '
-                   'vuelve a poner.',
-                   'EnableGpuFirmware tenía un valor REG_QWORD (puesto por otra herramienta o a mano). Se guardó tal '
-                   'cual y se cambió por el valor DWORD que necesita el reemplazo; Quitar reemplazo lo vuelve a poner.',
-                   'set EnableGpuFirmware = REG_QWORD 0x11', 'GPU 0: reemplazo quitado.'),
-        }
         qword = (0x11).to_bytes(8, 'little')
-        for language, (confirm, saved, restore, removed) in texts.items():
+        for language, removed in (('en', 'GPU 0: override removed.'), ('es', 'GPU 0: reemplazo quitado.')):
             with self.subTest(language=language):
                 fake, key = platform(values={ops.FIRMWARE: (REG_QWORD, qword)})
                 c = self.controller(fake, language)
                 c.choose_file(self.file(rom(RTX_5070)))
                 self.assertTrue(c.validation_text()[0])
                 question = c.confirm_load()
-                self.assertIn(confirm, question.split('\n\n'))
                 self.assertIn('set VixLoaderPreviousEnableGpuFirmware = REG_SZ hex(b):11,00,00,00,00,00,00,00',
                               question)
+                self.assertNotIn('set EnableGpuFirmware', question)
                 self.assertNotIn(STRINGS[language]['other_tool'], question)
                 ok, lines = c.run('load')
                 self.assertTrue(ok)
-                self.assertEqual(lines[1:], [saved, STRINGS[language]['restarted']])
-                self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
+                self.assertEqual(lines[1:], [STRINGS[language]['restart_windows']])
+                self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_QWORD, qword))      # left as it is
                 c.refresh()
                 self.assertTrue(c.rows()[0][5].startswith(STRINGS[language]['override_loaded'].split(':')[0]))
                 question, error = c.confirm_remove()
                 self.assertIsNone(error)
-                self.assertIn(restore, question)
+                self.assertIn('set EnableGpuFirmware = REG_QWORD 0x11', question)
                 ok, lines = c.run('unload')
                 self.assertEqual((ok, lines[0]), (True, removed))
                 self.assertEqual(key.get_raw(ops.FIRMWARE), (REG_QWORD, qword))
                 self.assertEqual(set(key.values), {*UNRELATED, ops.FIRMWARE})
 
-        # With another tool's override as well, both notes are shown, that one first.
+        # With another tool's override as well, only that note is shown: EnableGpuFirmware is not changed.
         fake, key = platform(values={ops.VBIOS: (REG_BINARY, b'mvolt'), ops.FIRMWARE: (REG_SZ, b'1\0')})
         c = self.controller(fake)
         c.choose_file(self.file(rom(RTX_5070)))
         ok, lines = c.run('load')
-        self.assertEqual(lines[1:3], [STRINGS['en']['other_tool'],
-                                      STRINGS['en']['firmware_raw_saved'].format(type='REG_SZ')])
-        # A REG_DWORD of another size is named with its size, so the note does not contradict itself.
-        for language, note in (('en', 'EnableGpuFirmware holds a 2-byte REG_DWORD value (set by another tool or by '
-                                      'hand).'),
-                                ('es', 'EnableGpuFirmware tiene un valor REG_DWORD de 2 bytes (puesto por otra '
-                                       'herramienta o a mano).')):
-            fake, key = platform(values={ops.FIRMWARE: (REG_DWORD, b'\x11\0')})
-            c = self.controller(fake, language)
-            c.choose_file(self.file(rom(RTX_5070)))
-            self.assertIn(note, c.confirm_load())
+        self.assertEqual(lines[1:], [STRINGS['en']['other_tool'], STRINGS['en']['restart_windows']])
         # A value too large to save is refused before anything is written.
         fake, key = platform(values={ops.FIRMWARE: (REG_BINARY, bytes(5000))})
         c = self.controller(fake)
@@ -206,22 +183,65 @@ class ControllerTests(unittest.TestCase):
         self.assertIsNone(c.confirm_load())
         self.assertEqual(key.calls, [])
 
+    def test_gpus_left_in_gsp_firmware_mode_by_0_3_x_are_named_and_a_load_undoes_it(self):
+        old = {ops.VBIOS: (REG_BINARY, chain(RTX_5070)), ops.FIRMWARE: (REG_DWORD, 0x11),
+               ops.BACKUP: (REG_SZ, '0x00000012')}
+        gpus = [adapter(i, location=f'0{i + 1}:00.0') for i in range(3)]
+        keys = {gpus[0].instance_id: FakeKey(old), gpus[1].instance_id: FakeKey(UNRELATED),
+                gpus[2].instance_id: FakeKey({**old, ops.BACKUP: (REG_SZ, ops.ABSENT)})}
+        self.assertEqual(Controller(FakePlatform(gpus, keys)).refresh(),
+                         [STRINGS['en']['gsp_old_loader'].format(index=index) for index in (0, 2)])
+        texts = {
+            'en': ('GPU 0: GSP firmware mode is on (set by loader 0.3.2 or older). Load the VBIOS file again with this '
+                   'version (or remove the override) and restart Windows.',
+                   'EnableGpuFirmware goes back to its value before the first load: 0x00000012. Loader 0.3.2 or older '
+                   "set it to 0x11, which turns on the driver's GSP firmware mode; this version no longer turns that "
+                   'mode on.'),
+            'es': ('GPU 0: el modo de firmware GSP está activado (lo activó el loader 0.3.2 o anterior). Vuelve a '
+                   'cargar el archivo VBIOS con esta versión (o quita el reemplazo) y reinicia Windows.',
+                   'EnableGpuFirmware vuelve a su valor de antes de la primera carga: 0x00000012. El loader 0.3.2 o '
+                   'anterior lo puso en 0x11, lo que activa el modo de firmware GSP del driver; esta versión ya no '
+                   'activa ese modo.'),
+        }
+        for language, (line, restored) in texts.items():
+            with self.subTest(language=language):
+                fake, key = platform(values=old)
+                c = Controller(fake, language)
+                self.assertEqual(c.refresh(), [line])
+                c.choose_file(self.file(rom(RTX_5070)))
+                question = c.confirm_load()
+                self.assertIn('  set EnableGpuFirmware = REG_DWORD 0x12', question)
+                self.assertIn(restored, question.split('\n\n'))
+                ok, lines = c.run('load')
+                self.assertEqual((ok, lines[1:]), (True, [restored, STRINGS[language]['restart_windows']]))
+                self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x12))
+                self.assertEqual(c.refresh(), [])
+        # 0x11 set before the first load (by mVolt+, for example) is not 0.3.x's: a note when loading, no line.
+        for language in ('en', 'es'):
+            with self.subTest(language=language):
+                fake, key = platform(values={ops.FIRMWARE: (REG_DWORD, 0x11)})
+                c = self.controller(fake, language)
+                c.choose_file(self.file(rom(RTX_5070)))
+                self.assertIn(STRINGS[language]['firmware_gsp_kept'], c.confirm_load().split('\n\n'))
+                ok, lines = c.run('load')
+                self.assertEqual(lines[1:], [STRINGS[language]['firmware_gsp_kept'],
+                                             STRINGS[language]['restart_windows']])
+                self.assertEqual(c.refresh(), [])
+                self.assertEqual(key.values[ops.FIRMWARE], (REG_DWORD, 0x11))
+
     def test_worker_errors_are_reported_not_raised(self):
-        fake, key = platform(restart=(None, 'timed out'))
+        fake, key = platform()
         c = self.controller(fake)
         c.choose_file(self.file(rom(RTX_5070)))
-        ok, lines = c.run('load')
-        self.assertFalse(ok)
-        self.assertIn('restart failed (pnputil did not finish)', lines[-2])
-        self.assertEqual(lines[-1], 'timed out')
         fake.admin = False
         self.assertEqual(c.run('unload'), (False, ['Error: administrator rights are required; run this from an '
                                                    'elevated PowerShell']))
 
-        def broken(instance_id):
+        def broken(adapter, write=False):
             raise RuntimeError('boom')
-        fake.admin, fake.restart_device = True, broken
+        fake.admin, fake.open_key = True, broken
         self.assertEqual(c.run('unload'), (False, ['Unexpected error: RuntimeError: boom']))
+        self.assertEqual(key.calls, [])
 
     def test_verify_needs_only_a_selected_gpu_and_reports_each_state(self):
         fake, key = platform(admin=False, image=b'card image')
@@ -229,7 +249,7 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(c.can_verify())                 # no file and no administrator rights needed
         ok, lines = c.run('verify')
         self.assertEqual((ok, lines[0]), (True, "GPU 0: no override stored: the driver should be using the card's "
-                                                'own VBIOS. If you just removed one, restart the GPU or Windows first.'))
+                                                'own VBIOS. If you just removed one, restart Windows first.'))
         self.assertTrue(lines[1].startswith('Running VBIOS: 10 bytes, sha256 '))
         key.values = {ops.VBIOS: (REG_BINARY, b'card image'), 'romOverride00': (REG_BINARY, b'r')}
         ok, lines = c.run('verify')
@@ -240,7 +260,9 @@ class ControllerTests(unittest.TestCase):
         key.values[ops.VBIOS] = (REG_BINARY, b'card imagf')
         ok, lines = c.run('verify')
         self.assertFalse(ok)
-        self.assertTrue(lines[0].startswith('GPU 0: the driver is NOT using the stored override. If you just loaded'))
+        self.assertEqual(lines[0], 'GPU 0: the driver is NOT using the stored override. If you just loaded it, '
+                                   'restart Windows; otherwise the driver may have rejected it and is running the '
+                                   "card's own VBIOS.")
         self.assertEqual(lines[1], 'First difference at offset 0x9.')
         self.assertEqual(key.calls, [])
         c.busy = True
@@ -262,12 +284,13 @@ class ControllerTests(unittest.TestCase):
                                                                     'cannot be read back.')
         fake.image = b'\xff' + big[1:1024000]
         ok, lines = c.run('verify')
-        self.assertEqual((ok, lines[0].startswith('GPU 0: el driver NO está usando'), lines[2]),
-                         (False, True, 'Primera diferencia en el offset 0x0.'))
+        self.assertEqual((ok, lines[0], lines[2]),
+                         (False, 'GPU 0: el driver NO está usando el reemplazo guardado. Si lo acabas de cargar, '
+                                 'reinicia Windows; si no, puede que el driver lo haya rechazado y esté usando la '
+                                 'VBIOS de la tarjeta.', 'Primera diferencia en el offset 0x0.'))
         key.values = {'romOverride00': (REG_BINARY, b'r')}
         self.assertEqual(c.run('verify')[1][:2], ['GPU 0: sin reemplazo guardado: el driver debería usar la VBIOS de '
-                                                  'la tarjeta. Si acabas de quitar uno, reinicia la GPU o Windows '
-                                                  'primero.',
+                                                  'la tarjeta. Si acabas de quitar uno, reinicia Windows primero.',
                                                   'También hay registros romOverride (mVolt+) guardados; el driver '
                                                   'puede aplicarlos.'])
         reads = iter([b'a', b'b'])
@@ -307,6 +330,10 @@ class ControllerTests(unittest.TestCase):
         window.update_controls()
         self.assertTrue(window.verify_button.instate(['disabled']))
         self.assertEqual(str(window.working.cget('text')), STRINGS['es']['verifying'])
+        window.action = 'load'
+        window.update_controls()
+        self.assertEqual(str(window.working.cget('text')), 'Trabajando...')
+        self.assertFalse(hasattr(window, 'restart_box'))       # no "restart the GPU" checkbox
 
     def same_model(self):
         gpus = [adapter(i, location=f'0{i + 1}:00.0') for i in range(3)]
@@ -324,7 +351,6 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertTrue(lines[0].startswith('GPU 0: VBIOS loaded'))
         self.assertEqual([ops.VBIOS in keys[gpu.instance_id].values for gpu in gpus], [False, True, False])
-        self.assertEqual(fake.restarted, [gpus[1].instance_id])
 
     def test_a_gpu_that_goes_away_stays_selected_and_is_not_replaced(self):
         gpus, _, fake = self.same_model()

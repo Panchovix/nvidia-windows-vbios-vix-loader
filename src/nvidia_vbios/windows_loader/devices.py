@@ -9,7 +9,6 @@ A platform object provides:
   get_raw(name) -> (type, bytes) | None and set_raw(name, type, bytes) for a value's exact data,
   flush() and close(); get and set convert with decode and encode below;
 - is_admin() -> bool;
-- restart_device(instance_id) -> (exit code or None, output text);
 - vbios_image(adapter) -> bytes: the VBIOS image the driver is running (nvapi.py).
 
 win32.py implements it with SetupAPI and the registry functions; tests use a fake.

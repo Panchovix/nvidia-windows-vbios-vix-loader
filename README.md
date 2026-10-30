@@ -87,8 +87,7 @@ exes from the releases, clone the repository and run the loader from source (see
 or build the exes yourself the same way the workflow does (see [Tests](#tests)).
 
 And lastly, if you don't want to use this loader for an edited VBIOS, you can use the BIOS override of mVolt+
-(https://github.com/b00nz/mVolt) instead. Issues related to mVolt+ go there, not to this repo. Keep in mind
-that its BIOS override works mostly on Blackwell.
+(Blackwell only, https://github.com/b00nz/mVolt) instead. Issues related to mVolt+ go there, not to this repo.
 
 ## Status
 

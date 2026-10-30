@@ -90,8 +90,7 @@ los releases, clona el repositorio y usa el loader desde el código fuente (ver 
 compila los exe tú mismo igual que el workflow (ver [Pruebas](#pruebas)).
 
 Por último, si no quieres usar este loader para una VBIOS editada, puedes usar el reemplazo de BIOS de mVolt+
-(https://github.com/b00nz/mVolt). Los problemas de mVolt+ se reportan allá, no en este repositorio. Ten en
-cuenta que su reemplazo de BIOS funciona sobre todo en Blackwell.
+(solo Blackwell, https://github.com/b00nz/mVolt). Los problemas de mVolt+ se reportan allá, no en este repositorio.
 
 ## Estado
 

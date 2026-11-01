@@ -99,8 +99,10 @@ El modo predeterminado del driver, el estado que dejan la 0.4.0 y las más nueva
 4090, una RTX 5070 y una RTX A2000 (la A2000 es la que da imagen): después de reiniciar Windows, Verificar
 confirmó el reemplazo en las tres, y los límites de potencia editados (máximos más altos y mínimos más bajos)
 se aplicaron y se mantuvieron bajo carga. En la A2000, Apple Music se abrió y funcionó sin que el driver se
-reiniciara. Turing, los portátiles y los drivers distintos de 621.01 todavía no están probados en el modo
-predeterminado. Si una GPU no arranca en el modo predeterminado, quita el reemplazo en Modo seguro (ver [Si la
+reiniciara. Desde entonces funcionó en GPUs Turing, Ampere, Ada y Blackwell, tanto de escritorio como portátiles
+(entre ellas una RTX 2070 Laptop GPU), salvo las RTX 40 (Ada) de portátil, donde no funciona. Los drivers distintos
+de 621.01 todavía no están probados en el modo predeterminado. Si una GPU no arranca en el modo predeterminado,
+quita el reemplazo en Modo seguro (ver [Si la
 GPU no arranca](#si-la-gpu-no-arranca)) y abre un issue; la versión 0.3.2, que activa el modo de firmware GSP,
 sigue disponible.
 

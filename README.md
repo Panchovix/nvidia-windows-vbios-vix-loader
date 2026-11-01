@@ -95,8 +95,9 @@ The driver's default mode, the state 0.4.0 and newer leave (`vbios` stored, `Ena
 default `0x12`), was tested with driver 621.01 on an RTX 4090, an RTX 5070 and an RTX A2000 (the A2000 drives the
 display): after a Windows restart, Verify confirmed the override on all three, and the edited power limits
 (raised maximums and lowered minimums) applied and held under load. On the A2000, Apple Music opened and ran
-without a driver reset. Turing GPUs, laptops and drivers other than 621.01 are not tested in the default mode
-yet. If a GPU does not start in the default mode, remove the override in
+without a driver reset. It has since worked on Turing, Ampere, Ada and Blackwell GPUs, desktops and laptops alike
+(an RTX 2070 Laptop GPU among them), except RTX 40 (Ada) laptop GPUs, where it does not work. Drivers other than
+621.01 are not tested in the default mode yet. If a GPU does not start in the default mode, remove the override in
 Safe Mode (see [If the GPU does not start](#if-the-gpu-does-not-start)) and open an issue; version 0.3.2, which
 turns GSP firmware mode on, stays available.
 

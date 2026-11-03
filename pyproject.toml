@@ -27,3 +27,8 @@ vbios-loader-gui = "nvidia_vbios.windows_loader.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+
+[tool.pyright]
+extraPaths = ["src", "tests"]

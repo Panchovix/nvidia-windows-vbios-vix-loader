@@ -8,7 +8,7 @@ restart Windows. `verify` checks that the driver is running it, and `unload` rem
 flash chip is never written.
 
 Works with NVIDIA 616.x, 617.x and 621.x drivers (616.56 or newer; tested on 621.01 in the driver's default
-mode, and with versions up to 0.3.2 on 617.42 and 617.70). It may stop working in a future driver if NVIDIA
+mode, and with versions up to 0.3.2 on 617.42 and 617.70), and 580.x or newer Data Center drivers for Volta. It may stop working in a future driver if NVIDIA
 decides to change or remove the registry override, so click **Verify** after every driver update.
 
 Thanks to **@pantsoftime** ([overclock.net](https://www.overclock.net)), whose original `vbios_override` work
@@ -95,7 +95,7 @@ The driver's default mode, the state 0.4.0 and newer leave (`vbios` stored, `Ena
 default `0x12`), was tested with driver 621.01 on an RTX 4090, an RTX 5070 and an RTX A2000 (the A2000 drives the
 display): after a Windows restart, Verify confirmed the override on all three, and the edited power limits
 (raised maximums and lowered minimums) applied and held under load. On the A2000, Apple Music opened and ran
-without a driver reset. It has since worked on Turing, Ampere, Ada and Blackwell GPUs, desktops and laptops alike
+without a driver reset. It has since worked on Volta, Turing, Ampere, Ada and Blackwell GPUs, desktops and laptops alike
 (an RTX 2070 Laptop GPU among them), except RTX 40 (Ada) laptop GPUs, where it does not work. Drivers other than
 621.01 are not tested in the default mode yet. If a GPU does not start in the default mode, remove the override in
 Safe Mode (see [If the GPU does not start](#if-the-gpu-does-not-start)) and open an issue; version 0.3.2, which
@@ -109,6 +109,7 @@ Earlier results, with versions up to 0.3.2 (GSP firmware mode):
 | Ada AD10x (GeForce RTX 40, RTX Ada) | Tested on an RTX 4090 (VBIOS 95.02.18, driver 617.42) with an `ada-relocated-v2` payload: a raised power limit (671 W) and core clock offset range (+1200 MHz) applied. Other Ada GPUs are untested. |
 | Ampere GA102–GA107 (GeForce RTX 30, RTX A series) | Tested on an RTX A2000 (driver 617.42) with an `ampere-relocated-v1` payload: a lowered power floor (5 W) applied. On an RTX 3050 6GB Laptop GPU (driver 617.42) a lowered power ceiling (70 W) applied; a raised one is untested on laptops. Other Ampere GPUs are untested. GA100 (A100, A30, A800) is not supported. |
 | Turing TU102–TU117 (GeForce RTX 20, GTX 16, TITAN RTX, Quadro RTX, T series) | **Experimental.** Tested on an RTX 2080 Ti (ROG Matrix BIOS, driver 617.70): with the board and connector power raised, the card reached about 458 W under load. An RTX 2070 reached 225 W with its power limit raised from 200 W, and an RTX 2070 SUPER also ran an edited image. Other Turing GPUs are untested. If the override is refused, the card runs its stock VBIOS. See the [Turing tester guide](https://github.com/Panchovix/nvidia-vbios-vix-editor/blob/main/docs/turing.md). |
+| Volta GV100 (Tesla V100, Tesla V100S, TITAN V) | **Experimental.** Tested on a Tesla V100 PCIe (driver 580.xx): an edited VBIOS loaded and verified with raised board power and HBM2 clock targets. Cards operating in TCC (Tesla Compute Cluster) mode are discovered via NvAPI TCC enumeration. Able to set V100 settings to that of the V100S |
 
 If you try it, please open an issue with the GPU, driver version and result.
 
@@ -117,7 +118,7 @@ If you try it, please open an issue with the GPU, driver version and result.
 - Windows 10 or 11, 64-bit.
 - An administrator account. The window program asks for administrator rights when it starts; run the
   command-line tool from an elevated PowerShell ("Run as administrator").
-- NVIDIA driver **616.x, 617.x or 621.x**, 616.56 or newer (`status` shows the version).
+- NVIDIA driver **616.x, 617.x or 621.x** (616.56 or newer; `status` shows the version), or **580.x or newer** enterprise Data Center driver for Volta.
 - A payload file for that exact GPU model (same PCI device ID).
 
 ## Which file to load
@@ -139,6 +140,8 @@ it: load that file. The commands below do the same from the command line.
   `.\nvbios.exe normalize edited.rom payload.bin`. Vix Editor 0.1.18 or newer saves it as `<name>-loader.bin`, plus
   `<name>-loader-e0end.bin` (`--representation turing-e0-end-v1`) to try if the first loads but the edit
   does not apply. Report the **Verify** result and `nvidia-smi -q -d POWER` before and after.
+- **Volta GV100** (experimental): the payload fits without relocation (~331 KiB):
+  `.\nvbios.exe normalize edited.rom payload.bin`, or load the edited ROM directly if it is a single-bank dump.
 
 ## Usage
 

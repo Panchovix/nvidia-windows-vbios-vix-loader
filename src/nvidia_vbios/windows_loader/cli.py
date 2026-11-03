@@ -65,7 +65,8 @@ def _override_lines(override):
 def _gpu_lines(gpu):
     subsystem = f" subsystem {gpu['subsystem']}" if gpu['subsystem'] else ''
     driver = gpu['nvidia_driver_version'] or 'unknown'
-    gate = '' if gpu['driver_supported'] else f' (too old: {MIN_DRIVER[0]}.{MIN_DRIVER[1]} or newer is required)'
+    min_req = gpu.get('min_driver', MIN_DRIVER)
+    gate = '' if gpu['driver_supported'] else f' (too old: {min_req[0]}.{min_req[1]} or newer is required)'
     return [f"GPU {gpu['index']}: {gpu['name']}",
             f"  PCI {gpu['location'] or 'unknown location'}, ID {gpu['pci_id']}{subsystem}, {gpu['family']}",
             f"  driver {driver} ({gpu['driver_version'] or 'unknown'}){gate}"] + \

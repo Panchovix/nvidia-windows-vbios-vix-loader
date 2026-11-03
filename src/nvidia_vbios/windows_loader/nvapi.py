@@ -31,6 +31,7 @@ FUNCTIONS = {
     'Unload': (0xD22BDD7E, ctypes.CFUNCTYPE(ctypes.c_int)),
     'GetErrorMessage': (0x6C2D048C, ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_char))),
     'EnumPhysicalGPUs': (0xE5AC921F, ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(ctypes.c_void_p), _U32)),
+    'EnumTCCPhysicalGPUs': (0xD9930B07, ctypes.CFUNCTYPE(ctypes.c_int, ctypes.POINTER(ctypes.c_void_p), _U32)),
     'GPU_GetBusId': (0x1BE0B8E5, ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, _U32)),
     'GPU_GetBusSlotId': (0x2A0A350F, ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, _U32)),
     'GPU_GetVbiosImage': (0xFC13EE11, ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p,
@@ -88,8 +89,19 @@ class NvApi:
         bus, device = int(location[:2], 16), int(location[3:5], 16)
         handles, count = (ctypes.c_void_p * MAX_PHYSICAL_GPUS)(), ctypes.c_uint32()
         self.call('EnumPhysicalGPUs', handles, ctypes.byref(count))
+        all_handles = list(handles[:min(count.value, MAX_PHYSICAL_GPUS)])
+        # Tesla GPUs in TCC (Tesla Compute Cluster) mode are omitted by EnumPhysicalGPUs;
+        # query EnumTCCPhysicalGPUs to discover compute-only adapters.
+        tcc_handles, tcc_count = (ctypes.c_void_p * MAX_PHYSICAL_GPUS)(), ctypes.c_uint32()
+        try:
+            if self.function('EnumTCCPhysicalGPUs')(tcc_handles, ctypes.byref(tcc_count)) == OK:
+                for h in tcc_handles[:min(tcc_count.value, MAX_PHYSICAL_GPUS)]:
+                    if h not in all_handles:
+                        all_handles.append(h)
+        except NvApiError:
+            pass
         found = []
-        for handle in handles[:min(count.value, MAX_PHYSICAL_GPUS)]:
+        for handle in all_handles:
             ids = ctypes.c_uint32(), ctypes.c_uint32()
             if self.function('GPU_GetBusId')(handle, ctypes.byref(ids[0])) == OK and \
                     self.function('GPU_GetBusSlotId')(handle, ctypes.byref(ids[1])) == OK:

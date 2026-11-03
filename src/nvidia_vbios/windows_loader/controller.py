@@ -328,7 +328,9 @@ class Controller:
         if version is None:
             return self.text['driver_unknown']
         return version if gpu['driver_supported'] else \
-            self.text['driver_too_old'].format(version=version, minimum=MINIMUM)
+            self.text['driver_too_old'].format(
+                version=version,
+                minimum=f"{gpu.get('min_driver', MIN_DRIVER)[0]}.{gpu.get('min_driver', MIN_DRIVER)[1]:02d}")
 
     def rows(self):
         """(index, name, PCI ID, location, driver, override) per GPU."""

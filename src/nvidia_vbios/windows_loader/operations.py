@@ -32,9 +32,16 @@ MAX_SAVED = 4096              # bytes of a non-DWORD EnableGpuFirmware that load
 RAW_BACKUP = re.compile(r'hex\((0|[1-9a-f][0-9a-f]{0,7})\):((?:[0-9a-f]{2}(?:,[0-9a-f]{2})*)?)')
 PATCH_RECORDS = tuple(f'romOverride{i:02X}' for i in range(256))
 MIN_DRIVER = (616, 56)
+MIN_DRIVER_VOLTA = (580, 0)
 RESTART_HINT = ('Restart Windows to apply the change. Shutting down works too when Windows Fast Startup is off. '
                 'With it on, the change waits for the next restart, and nothing has to be repeated.')
 VERIFY_OK = ('override-active', 'no-override')    # the driver runs what the registry says
+
+
+def min_driver(family: str) -> tuple[int, int]:
+    """Volta (Tesla V100 / TITAN V) uses enterprise Data Center drivers (580+),
+    while Turing and newer client GPUs require 616.56+."""
+    return MIN_DRIVER_VOLTA if family == 'volta' else MIN_DRIVER
 
 
 class LoaderError(Exception):
@@ -141,12 +148,14 @@ def describe(key):
 def _adapter_info(adapter):
     version = nvidia_version(adapter.driver_version)
     family = architecture(adapter.device)['family'] if adapter.vendor == 0x10DE else 'unknown'
+    req_driver = min_driver(family)
     return {'index': adapter.index, 'name': adapter.name, 'pci_id': f'{adapter.vendor:04x}:{adapter.device:04x}',
             'subsystem': None if adapter.subsystem is None else f'{adapter.subsystem:08x}',
             'location': adapter.location, 'instance_id': adapter.instance_id, 'family': family,
             'driver_version': adapter.driver_version,
             'nvidia_driver_version': None if version is None else f'{version[0]}.{version[1]:02d}',
-            'driver_supported': version is not None and version >= MIN_DRIVER,
+            'driver_supported': version is not None and version >= req_driver,
+            'min_driver': req_driver,
             'driver_key': adapter.driver_key}
 
 
@@ -209,9 +218,11 @@ def load(platform, data, *, gpu=None, pci=None, instance_id=None, dry_run=False)
     version = nvidia_version(adapter.driver_version)
     if version is None:
         raise LoaderError(f'cannot read the NVIDIA driver version of GPU {adapter.index} ({adapter.driver_version!r})')
-    if version < MIN_DRIVER:
+    family = architecture(adapter.device)['family'] if adapter.vendor == 0x10DE else 'unknown'
+    req_driver = min_driver(family)
+    if version < req_driver:
         raise LoaderError(f'NVIDIA driver {version[0]}.{version[1]:02d} is too old; '
-                          f'{MIN_DRIVER[0]}.{MIN_DRIVER[1]} or newer is required')
+                          f'{req_driver[0]}.{req_driver[1]} or newer is required')
     try:
         chain = extract_chain(data, adapter.vendor, adapter.device)
     except PayloadError as exc:

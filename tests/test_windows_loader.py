@@ -20,7 +20,7 @@ from nvidia_vbios.windows_loader.devices import (REG_BINARY, REG_DWORD, REG_EXPA
                                                  type_name, value_text)
 from nvidia_vbios.windows_loader.image import extract_chain
 
-RTX_5070, RTX_5070_TI, RTX_4090, RTX_A2000, A100 = 0x2C09, 0x2C05, 0x2684, 0x2531, 0x20B5
+RTX_5070, RTX_5070_TI, RTX_4090, RTX_A2000, A100, TESLA_V100 = 0x2C09, 0x2C05, 0x2684, 0x2531, 0x20B5, 0x1DB4
 RTX_2060_SUPER = 0x1F06
 PREFIX, TRAILING = 0x400, 0x300
 
@@ -273,6 +273,19 @@ class LoadUnloadTests(unittest.TestCase):
         with self.assertRaisesRegex(ops.LoaderError, 'administrator'):
             ops.unload(fake)
         self.assertEqual(key.calls, [])
+
+    def test_volta_driver_threshold(self):
+        fake_volta_old, _ = platform(device=TESLA_V100, version='32.0.15.6094')
+        with self.assertRaisesRegex(ops.LoaderError, 'NVIDIA driver 560.94 is too old; 580.0 or newer is required'):
+            ops.load(fake_volta_old, rom(TESLA_V100), dry_run=True)
+
+        fake_volta_ok, _ = platform(device=TESLA_V100, version='32.0.15.8000')
+        report = ops.load(fake_volta_ok, rom(TESLA_V100), dry_run=True)
+        self.assertEqual(report['gpu']['family'], 'volta')
+
+        fake_client_580, _ = platform(device=RTX_5070, version='32.0.15.8000')
+        with self.assertRaisesRegex(ops.LoaderError, 'NVIDIA driver 580.00 is too old; 616.56 or newer is required'):
+            ops.load(fake_client_580, rom(RTX_5070), dry_run=True)
 
     def test_partial_write_failure_says_so_and_unload_recovers(self):
         class FailingKey(FakeKey):

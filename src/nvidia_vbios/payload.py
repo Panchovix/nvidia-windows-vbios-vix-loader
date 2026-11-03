@@ -17,7 +17,7 @@ GA10X_MAX_SIZE = 512 * 1024
 ADA_MAX_SIZE = GA10X_MAX_SIZE  # Compatibility name: AD10x has the same audited capacity.
 # TU10x/TU11x (gsp_tu10x.bin) has the same 512 KiB: found by static emulation of the capacity
 # callback of the 615.78.08 firmware, whose override receiver matches gsp_ga10x.bin; not hardware-tested.
-SCOPE = ('turing', 'ampere', 'ada', 'blackwell-gb20x')
+SCOPE = ('volta', 'turing', 'ampere', 'ada', 'blackwell-gb20x')
 
 
 class PayloadError(ValueError):

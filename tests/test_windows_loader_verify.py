@@ -92,7 +92,8 @@ class NvApiTests(unittest.TestCase):
         self.assertEqual((nvapi.IMAGE_SIZE, nvapi.IMAGE_VERSION, nvapi.MAX_PHYSICAL_GPUS), (1024000, 16 | 2 << 16, 64))
         self.assertEqual({name: function_id for name, (function_id, _) in nvapi.FUNCTIONS.items()},
                          {'Initialize': 0x0150E828, 'Unload': 0xD22BDD7E, 'GetErrorMessage': 0x6C2D048C,
-                          'EnumPhysicalGPUs': 0xE5AC921F, 'GPU_GetBusId': 0x1BE0B8E5, 'GPU_GetBusSlotId': 0x2A0A350F,
+                          'EnumPhysicalGPUs': 0xE5AC921F, 'EnumTCCPhysicalGPUs': 0xD9930B07,
+                          'GPU_GetBusId': 0x1BE0B8E5, 'GPU_GetBusSlotId': 0x2A0A350F,
                           'GPU_GetVbiosImage': 0xFC13EE11})
 
     def test_the_gpu_is_found_by_bus_and_slot(self):

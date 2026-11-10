@@ -50,24 +50,24 @@ use windows_sys::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    EnableWindow, GetActiveWindow, GetFocus, IsWindowEnabled, SetFocus,
+    EnableWindow, GetActiveWindow, GetFocus, IsWindowEnabled, SetFocus, VK_ESCAPE,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CallWindowProcW, CheckMenuRadioItem, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-    DestroyWindow, DispatchMessageW, GetClientRect, GetDlgCtrlID, GetMessageW, GetWindowLongPtrW, GetWindowRect,
-    GetWindowTextLengthW, GetWindowTextW, IsChild, IsDialogMessageW, IsWindow, IsWindowVisible, KillTimer, LoadCursorW,
-    LoadIconW, MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassExW, SendMessageW, SetTimer, SetWindowLongPtrW,
-    SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenuEx, TranslateMessage, BN_CLICKED, BS_OWNERDRAW,
-    BS_PUSHBUTTON, BS_TYPEMASK, CREATESTRUCTW, CW_USEDEFAULT, ES_AUTOHSCROLL, ES_AUTOVSCROLL, ES_MULTILINE,
-    ES_READONLY, GWLP_USERDATA, GWLP_WNDPROC, GWL_EXSTYLE, GWL_STYLE, HMENU, HWND_TOPMOST, IDC_ARROW, IDI_APPLICATION,
-    IDOK, MB_ICONERROR, MB_ICONINFORMATION, MB_ICONWARNING, MB_OK, MB_OKCANCEL, MESSAGEBOX_STYLE, MF_BYCOMMAND,
-    MF_STRING, MINMAXINFO, MSG, NONCLIENTMETRICSW, SB_BOTTOM, SPI_GETNONCLIENTMETRICS, SWP_FRAMECHANGED,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOW, SW_SHOWDEFAULT, TPMPARAMS, TPM_LEFTALIGN,
-    TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN, TPM_VERTICAL, WA_INACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE, WM_COMMAND,
-    WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_DRAWITEM, WM_ERASEBKGND,
-    WM_GETMINMAXINFO, WM_NCCREATE, WM_NCDESTROY, WM_NOTIFY, WM_PAINT, WM_PRINTCLIENT, WM_QUERYENDSESSION, WM_SETFOCUS,
-    WM_SETFONT, WM_SIZE, WM_TIMER, WM_VSCROLL, WNDCLASSEXW, WNDPROC, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE,
-    WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+    DestroyWindow, DispatchMessageW, GetClientRect, GetDlgCtrlID, GetMessageW, GetNextDlgTabItem, GetWindowLongPtrW,
+    GetWindowRect, GetWindowTextLengthW, GetWindowTextW, IsChild, IsDialogMessageW, IsWindow, IsWindowVisible,
+    KillTimer, LoadCursorW, LoadIconW, MessageBoxW, PostMessageW, PostQuitMessage, RegisterClassExW, SendMessageW,
+    SetTimer, SetWindowLongPtrW, SetWindowPos, SetWindowTextW, ShowWindow, TrackPopupMenuEx, TranslateMessage,
+    BN_CLICKED, BS_OWNERDRAW, BS_PUSHBUTTON, BS_TYPEMASK, CREATESTRUCTW, CW_USEDEFAULT, ES_AUTOHSCROLL, ES_AUTOVSCROLL,
+    ES_MULTILINE, ES_READONLY, GWLP_USERDATA, GWLP_WNDPROC, GWL_EXSTYLE, GWL_STYLE, HMENU, HWND_TOPMOST, IDC_ARROW,
+    IDI_APPLICATION, IDOK, MB_ICONERROR, MB_ICONINFORMATION, MB_ICONWARNING, MB_OK, MB_OKCANCEL, MESSAGEBOX_STYLE,
+    MF_BYCOMMAND, MF_STRING, MINMAXINFO, MSG, NONCLIENTMETRICSW, SB_BOTTOM, SPI_GETNONCLIENTMETRICS, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOCOPYBITS, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_SHOW, SW_SHOWDEFAULT, TPMPARAMS,
+    TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TPM_TOPALIGN, TPM_VERTICAL, WA_INACTIVE, WM_ACTIVATE, WM_APP, WM_CLOSE,
+    WM_COMMAND, WM_CTLCOLORBTN, WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DPICHANGED, WM_DRAWITEM,
+    WM_ERASEBKGND, WM_GETMINMAXINFO, WM_KEYDOWN, WM_NCCREATE, WM_NCDESTROY, WM_NEXTDLGCTL, WM_NOTIFY, WM_PAINT,
+    WM_PRINTCLIENT, WM_QUERYENDSESSION, WM_SETFOCUS, WM_SETFONT, WM_SIZE, WM_TIMER, WM_VSCROLL, WNDCLASSEXW, WNDPROC,
+    WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE, WS_OVERLAPPEDWINDOW, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
 };
 
 use super::args::Options;
@@ -186,6 +186,11 @@ fn message_loop(hwnd: HWND) {
         if result == 0 || result == -1 {
             break;
         }
+        // A multi-line edit under IsDialogMessageW gets every key and, as in a dialog, posts WM_CLOSE to its parent
+        // on Escape: Escape in the Messages area would close the window. It does nothing there, as in gui.py.
+        if msg.message == WM_KEYDOWN && msg.wParam == usize::from(VK_ESCAPE) && is_log(hwnd, msg.hwnd) {
+            continue;
+        }
         // IsDialogMessageW moves the focus with Tab and Shift+Tab between the controls, as in a dialog.
         // SAFETY: `msg` was filled by GetMessageW.
         unsafe {
@@ -195,6 +200,12 @@ fn message_loop(hwnd: HWND) {
             }
         }
     }
+}
+
+/// True when `control` is the Messages area of the window.
+fn is_log(window: HWND, control: HWND) -> bool {
+    // SAFETY: plain queries; any window handle is accepted.
+    unsafe { !control.is_null() && IsChild(window, control) != 0 && GetDlgCtrlID(control) == i32::from(ID_LOG) }
 }
 
 #[derive(Clone, Copy)]
@@ -573,19 +584,7 @@ impl App {
             .map_or(min_h, |l| l.natural_height)
             .max(min_h);
         let (mut window_w, mut window_h) = window_size(hwnd, width, height, dpi);
-        // SAFETY: `hwnd` is our window; `info` is a valid MONITORINFO with cbSize set.
-        let work = unsafe {
-            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            let mut info = MONITORINFO {
-                cbSize: size_of::<MONITORINFO>() as u32,
-                ..Default::default()
-            };
-            if GetMonitorInfoW(monitor, &mut info) == 0 {
-                None
-            } else {
-                Some(info.rcWork)
-            }
-        };
+        let work = work_area(hwnd);
         let flags = SWP_NOZORDER | SWP_NOACTIVATE;
         // SAFETY: `hwnd` is our window.
         unsafe {
@@ -668,7 +667,8 @@ impl App {
             } else {
                 (w!("Explorer"), null())
             };
-            // SAFETY: plain control messages on our controls; SetWindowTheme takes static strings or null.
+            // SAFETY: plain control messages and style changes on our controls; SetWindowTheme takes static strings
+            // or null.
             unsafe {
                 // The button type is the low bits of the style (BS_TYPEMASK); changing it is what MFC's
                 // ModifyStyle(BS_TYPEMASK, BS_OWNERDRAW) does.
@@ -686,7 +686,21 @@ impl App {
                 SetWindowTheme(c.list, list_theme, null());
                 SetWindowTheme(c.path, edit_theme, null());
                 SetWindowTheme(c.log, edit_theme, null());
+                // The light theme keeps the native client edge; the dark one paints its own (painted_edge).
+                for edit in [c.path, c.log] {
+                    let style = GetWindowLongPtrW(edit, GWL_EXSTYLE);
+                    let edge = WS_EX_CLIENTEDGE as isize;
+                    let changed = if dark { style & !edge } else { style | edge };
+                    if changed != style {
+                        SetWindowLongPtrW(edit, GWL_EXSTYLE, changed);
+                        let keep = SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
+                        SetWindowPos(edit, null_mut(), 0, 0, 0, 0, keep | SWP_FRAMECHANGED);
+                    }
+                }
             }
+            // The edit controls move in or out of the painted edge.
+            self.layout.set(None);
+            self.layout();
         }
         dark_title_bar(hwnd, dark);
         dark_menus(dark);
@@ -1189,6 +1203,7 @@ impl App {
             return;
         }
         self.layout.set(Some(l));
+        let edge = self.painted_edge().map_or(0, |width| 2 * width);
         let placed = [
             (c.language, l.language),
             (c.theme, l.theme),
@@ -1196,15 +1211,18 @@ impl App {
             (c.list, l.list),
             (c.refresh, l.refresh),
             (c.file, l.file),
-            (c.path, l.path),
+            (c.path, l.path.inset(edge)),
             (c.validation, l.validation),
             (c.working, l.working),
             (c.load, l.load),
             (c.remove, l.remove),
             (c.verify, l.verify),
-            (c.log, l.log),
+            (c.log, l.log.inset(edge)),
         ];
         // SAFETY: moving our own child windows; then repaint the frames, titles and banner of the window.
+        // SWP_NOCOPYBITS: each control repaints at its new place. Without it Windows copies the control's pixels
+        // from its old place, and as the controls move one after the other, one can land where the next still is,
+        // whose copy then carries it along (a ghost "VBIOS file..." under the validation line after a resize).
         unsafe {
             for (control, r) in placed {
                 SetWindowPos(
@@ -1214,12 +1232,19 @@ impl App {
                     r.y,
                     r.w.max(0),
                     r.h.max(0),
-                    SWP_NOZORDER | SWP_NOACTIVATE,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS,
                 );
             }
             InvalidateRect(hwnd, null(), 1);
         }
         self.fit_columns();
+    }
+
+    /// The width of each line of the edge the window paints around the path field and the Messages area, in the
+    /// dark theme only. Their own client edge is themed light even with DarkMode_Explorer (which they keep for the
+    /// dark scroll bar), so there they have none and sit inside this one.
+    fn painted_edge(&self) -> Option<i32> {
+        self.dark.get().then(|| layout::edge(self.dpi.get()))
     }
 
     /// Column widths for the list's current width: Name and Override take what is left (or give it back).
@@ -1265,6 +1290,7 @@ impl App {
             (gdi.colors, gdi.font.handle())
         };
         let (layout, banner_shown, dpi) = (self.layout.get(), self.banner_shown.get(), self.dpi.get());
+        let edge = self.painted_edge();
         // SAFETY: all-zero is a valid PAINTSTRUCT for BeginPaint to fill.
         let mut ps: PAINTSTRUCT = unsafe { std::mem::zeroed() };
         // SAFETY: WM_PAINT of our window; EndPaint below.
@@ -1275,6 +1301,10 @@ impl App {
             }
             for (section, title) in [l.gpus, l.files, l.messages].iter().zip(titles) {
                 paint::section(hdc, section, title, &colors, font, dpi);
+            }
+            if let Some(width) = edge {
+                paint::edge(hdc, l.path, colors.border, colors.field, width);
+                paint::edge(hdc, l.log, colors.border, colors.log_bg, width);
             }
         }
         // SAFETY: pairs with BeginPaint.
@@ -1384,7 +1414,13 @@ impl App {
             WM_GETMINMAXINFO => {
                 let dpi = window_dpi(hwnd);
                 let (width, height) = layout::min_client(dpi);
-                let (width, height) = window_size(hwnd, width, height, dpi);
+                let (mut width, mut height) = window_size(hwnd, width, height, dpi);
+                // The minimum is in DIPs (780 x 540 at 96 DPI); at a high scale on a small screen it would not fit,
+                // and the bottom of the window would stay under the taskbar.
+                if let Some(work) = work_area(hwnd) {
+                    width = width.min(work.right - work.left);
+                    height = height.min(work.bottom - work.top);
+                }
                 // SAFETY: WM_GETMINMAXINFO's lParam points to a MINMAXINFO to fill.
                 if let Some(info) = unsafe { (lparam as *mut MINMAXINFO).as_mut() } {
                     info.ptMinTrackSize = POINT { x: width, y: height };
@@ -1457,6 +1493,22 @@ impl App {
                 Some(0)
             }
             WM_QUERYENDSESSION => Some(LRESULT::from(!self.busy())),
+            WM_NEXTDLGCTL => {
+                // The Messages area (a multi-line edit) asks for the next or previous control on Tab and
+                // Shift+Tab, or names one when the low word of lParam is set.
+                // SAFETY: plain focus calls on our own window and its controls.
+                unsafe {
+                    let target = if lparam & 0xFFFF != 0 {
+                        wparam as HWND
+                    } else {
+                        GetNextDlgTabItem(hwnd, GetFocus(), BOOL::from(wparam != 0))
+                    };
+                    if !target.is_null() {
+                        SetFocus(target);
+                    }
+                }
+                Some(0)
+            }
             _ => None,
         }
     }
@@ -1703,6 +1755,19 @@ fn window_dpi(hwnd: HWND) -> u32 {
     match unsafe { GetDpiForWindow(hwnd) } {
         0 => 96,
         dpi => dpi,
+    }
+}
+
+/// The work area (the screen without the taskbar) of the monitor the window is on.
+fn work_area(hwnd: HWND) -> Option<RECT> {
+    // SAFETY: `hwnd` is our window; `info` is a valid MONITORINFO with cbSize set.
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        (GetMonitorInfoW(monitor, &mut info) != 0).then_some(info.rcWork)
     }
 }
 

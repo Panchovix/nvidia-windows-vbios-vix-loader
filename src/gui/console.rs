@@ -8,11 +8,12 @@ use std::ptr::{null, null_mut};
 
 use windows_sys::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::Storage::FileSystem::{
-    CreateFileW, GetFileType, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TYPE_DISK, FILE_TYPE_PIPE, OPEN_EXISTING,
+    CreateFileW, GetFileType, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TYPE_CHAR, FILE_TYPE_DISK, FILE_TYPE_PIPE,
+    OPEN_EXISTING,
 };
 use windows_sys::Win32::System::Console::{
-    AttachConsole, FreeConsole, GetConsoleScreenBufferInfo, GetStdHandle, WriteConsoleW, ATTACH_PARENT_PROCESS,
-    CONSOLE_SCREEN_BUFFER_INFO, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
+    AttachConsole, FreeConsole, GetConsoleMode, GetConsoleScreenBufferInfo, GetStdHandle, WriteConsoleW,
+    ATTACH_PARENT_PROCESS, CONSOLE_SCREEN_BUFFER_INFO, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_ICONINFORMATION, MB_OK};
 
@@ -42,8 +43,9 @@ pub fn emit(stream: Stream, text: &dyn Fn(i64) -> String) {
     unsafe { MessageBoxW(null_mut(), body.as_ptr(), title.as_ptr(), MB_OK | icon) };
 }
 
-/// When the standard stream is a file or a pipe (`> out.txt`, `| more`, CI redirection), write there with CRLF
-/// line ends, as Python's text-mode stdout did on Windows. False when it is not redirected or the write failed.
+/// When the standard stream is a file, a pipe or a device such as NUL (`> out.txt`, `| more`, `>NUL`, CI
+/// redirection), write there with CRLF line ends, as Python's text-mode stdout did on Windows. False when it is not
+/// redirected or the write failed.
 fn write_redirected(stream: Stream, text: &dyn Fn() -> String) -> bool {
     let id = match stream {
         Stream::Out => STD_OUTPUT_HANDLE,
@@ -56,7 +58,11 @@ fn write_redirected(stream: Stream, text: &dyn Fn() -> String) -> bool {
     }
     // SAFETY: GetFileType accepts any handle value and only queries it.
     let kind = unsafe { GetFileType(handle) };
-    if kind != FILE_TYPE_DISK && kind != FILE_TYPE_PIPE {
+    // A character device that is no console is a redirection too: `>NUL` discards the text.
+    let mut mode = 0u32;
+    // SAFETY: GetConsoleMode only queries the handle; `mode` is a valid out-pointer.
+    let console = kind == FILE_TYPE_CHAR && unsafe { GetConsoleMode(handle, &mut mode) } != 0;
+    if !(kind == FILE_TYPE_DISK || kind == FILE_TYPE_PIPE || kind == FILE_TYPE_CHAR && !console) {
         return false;
     }
     let bytes = text().replace('\n', "\r\n").into_bytes();

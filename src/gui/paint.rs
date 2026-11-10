@@ -105,6 +105,18 @@ pub fn frame(hdc: HDC, rect: &RECT, color: Rgb) {
     }
 }
 
+/// The client edge of a control at `rect`, painted by the window (dark theme): `width` pixels of `line`, then
+/// `width` pixels of `inner`, the control's background. The control itself sits `2 * width` pixels inside.
+pub fn edge(hdc: HDC, rect: Rect, line: Rgb, inner: Rgb, width: i32) {
+    for step in 0..2 * width {
+        let ring = rect.inset(step);
+        if ring.w <= 0 || ring.h <= 0 {
+            break;
+        }
+        frame(hdc, &win_rect(ring), if step < width { line } else { inner });
+    }
+}
+
 /// Text in `rect` with these DrawText flags, in `color` with `font`, on a transparent background.
 pub fn text(hdc: HDC, text: &str, rect: &RECT, color: Rgb, font: HFONT, flags: DRAW_TEXT_FORMAT) {
     let _font = Selected::new(hdc, font);

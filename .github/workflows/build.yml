@@ -130,17 +130,41 @@ jobs:
         # The runner's shell is already elevated. The redirection makes Start-Process use CreateProcess, so the
         # exe inherits the environment, and a non-elevated shell fails at once (error 740) instead of prompting.
         # In smoke mode the window reads the status, writes nothing and exits 0.
+        # After the first screenshot the window grows in small steps, as dragging its corner does, and a second
+        # screenshot shows that every control repainted where it moved to.
         run: |
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class SmokeWindow {
+              [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+              public static extern IntPtr FindWindowW(string className, IntPtr windowName);
+              [DllImport("user32.dll")]
+              public static extern bool MoveWindow(IntPtr window, int x, int y, int width, int height, bool repaint);
+          }
+          '@
+          function Save-Screen([string]$name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("$PWD\$name")
+          }
           $env:VBIOS_LOADER_GUI_SMOKE = '1'
           $p = Start-Process -FilePath (Resolve-Path target/release/vbios-loader-gui.exe).Path -PassThru `
               -RedirectStandardOutput gui-out.txt -RedirectStandardError gui-err.txt
           $null = $p.Handle
           Start-Sleep -Seconds 10
-          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
-          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
-          $bmp.Save("$PWD\gui-smoke.png")
+          Save-Screen 'gui-smoke.png'
+          # Any title: PowerShell would pass $null to a string parameter as an empty title.
+          $window = [SmokeWindow]::FindWindowW('VbiosLoaderGuiWindow', [IntPtr]::Zero)
+          if ($window -eq [IntPtr]::Zero) { throw 'the window of vbios-loader-gui.exe was not found' }
+          foreach ($step in 0..16) {
+            $null = [SmokeWindow]::MoveWindow($window, 0, 0, 800 + 14 * $step, 560 + 12 * $step, $true)
+            Start-Sleep -Milliseconds 60
+          }
+          Start-Sleep -Seconds 1
+          Save-Screen 'gui-resized.png'
           $exited = $p.WaitForExit(60000)
           if (-not $exited) { Stop-Process -Id $p.Id -Force }
           Get-Content gui-out.txt, gui-err.txt -ErrorAction SilentlyContinue

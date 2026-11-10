@@ -26,6 +26,11 @@ impl Rect {
     pub const fn bottom(&self) -> i32 {
         self.y + self.h
     }
+
+    /// The rectangle `by` pixels smaller on every side.
+    pub const fn inset(&self, by: i32) -> Rect {
+        Rect::new(self.x + by, self.y + by, self.w - 2 * by, self.h - 2 * by)
+    }
 }
 
 /// A frame drawn around a group of controls, with its title on the top edge.
@@ -69,6 +74,12 @@ pub const MIN_CLIENT: (i32, i32) = (780, 540);
 pub fn scale(px: i32, dpi: u32) -> i32 {
     let dpi = i64::from(dpi.max(1));
     ((i64::from(px) * dpi + 48).div_euclid(96)) as i32
+}
+
+/// Width of each of the two lines of a client edge (SM_CXEDGE is 2 of them at 96 DPI): the dark theme paints the
+/// edge of the edit controls itself, a border line and then a line of the control's background.
+pub fn edge(dpi: u32) -> i32 {
+    scale(1, dpi).max(1)
 }
 
 /// The texts that wrap to the available width; the caller measures them (DrawText with DT_WORDBREAK).

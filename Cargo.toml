@@ -24,6 +24,9 @@ path = "src/bin/vbios-loader.rs"
 [[bin]]
 name = "vbios-loader-gui"
 path = "src/bin/vbios-loader-gui.rs"
+# No test harness: it would be linked with the window's manifest (requireAdministrator), and `cargo test` could not
+# start it from a shell without administrator rights. The program has no tests of its own (they are in the library).
+test = false
 
 # The only runtime dependency, and only on Windows: Microsoft's generated Win32 bindings (MIT OR Apache-2.0).
 [target.'cfg(windows)'.dependencies.windows-sys]

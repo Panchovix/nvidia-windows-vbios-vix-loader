@@ -398,6 +398,21 @@ fn missing_files_are_named_with_the_system_error_text() {
     assert_eq!(key.calls(), vec![]);
 }
 
+/// A folder given as the file: Windows does not open a folder as a file (ERROR_ACCESS_DENIED), which Python's
+/// open() showed as "Permission denied".
+#[test]
+#[cfg(windows)]
+fn a_folder_is_refused_as_python_refused_it_on_windows() {
+    let (fake, key) = shared(platform(RTX_5070, vec![]));
+    let directory = TempDir::new();
+    let folder = directory.path("folder");
+    std::fs::create_dir(&folder).expect("a temporary folder");
+    let (code, _, err) = run_cli(&["load", &folder], &fake);
+    assert_eq!(code, 1);
+    assert_eq!(err, format!("vbios-loader: cannot read {folder}: Permission denied\n"));
+    assert_eq!(key.calls(), vec![]);
+}
+
 #[test]
 #[cfg(not(windows))]
 fn other_systems_fail_cleanly_without_loading_windows_code() {

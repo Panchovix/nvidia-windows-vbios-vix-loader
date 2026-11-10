@@ -88,8 +88,9 @@ las GPUs que siguen con el modo de firmware GSP activado por una versión anteri
 Hasta la 0.4.x, algunos antivirus y analizadores en línea marcaban los dos exe (por ejemplo detecciones
 genéricas o "ML", o "Python DLL sideloading"): cada exe era un programa en Python empaquetado con Nuitka
 `--onefile`, que al arrancar descomprimía el runtime de Python en una carpeta temporal. Desde la 0.5.0 los exe
-son programas nativos escritos en Rust: no están empaquetados, no descomprimen nada y solo cargan DLLs del
-sistema de Windows. Siguen sin estar firmados. El loader no usa la red. Los compila GitHub Actions desde este
+son programas nativos escritos en Rust: no están empaquetados, no descomprimen nada y solo importan DLLs del
+sistema de Windows (Verificar además carga `nvapi64.dll`, del driver de NVIDIA, desde System32). Siguen sin estar
+firmados. El loader no usa la red. Los compila GitHub Actions desde este
 repositorio (ver [Pruebas](#pruebas)).
 
 Si un antivirus marca un archivo, compáralo con `SHA256SUMS` para confirmar que coincide con el archivo
@@ -286,7 +287,9 @@ cargo test
 ```
 
 Las pruebas usan archivos sintéticos y un registro simulado; funcionan en Linux y en Windows y nunca tocan
-una GPU ni el registro real. El workflow `.github/workflows/build.yml` las ejecuta en Linux (con `cargo fmt` y
+una GPU ni la clave de un driver. En Windows, unas pruebas más revisan las llamadas al registro en claves
+temporales bajo `HKEY_CURRENT_USER\Software`, que después borran, y listan los adaptadores de pantalla. El
+workflow `.github/workflows/build.yml` las ejecuta en Linux (con `cargo fmt` y
 `clippy`) y en Windows, compila `vbios-loader.exe` y `vbios-loader-gui.exe` con Rust, revisa los exe (sin DLLs
 del runtime de C, el manifiesto y la información de versión, sin instrucciones AVX-512), prueba que la ventana
 abra (con una captura de pantalla) y publica las versiones con tag como releases, junto con `SHA256SUMS` y los

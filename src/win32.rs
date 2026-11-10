@@ -448,7 +448,8 @@ mod tests {
     //! afterwards, and SetupAPI on whatever display adapters the machine has. No GPU or driver key is touched.
 
     use super::*;
-    use crate::devices::{REG_BINARY, REG_SZ};
+    use crate::devices::{decode, REG_BINARY, REG_DWORD, REG_SZ};
+    use crate::testing::every_type;
     use std::time::{SystemTime, UNIX_EPOCH};
     use windows_sys::Win32::System::Registry::{
         RegCreateKeyExW, RegDeleteKeyW, RegOpenKeyExW, HKEY_CURRENT_USER, REG_OPTION_VOLATILE,
@@ -539,6 +540,41 @@ mod tests {
         scratch.key.set_raw("empty", REG_BINARY, b"").unwrap();
         assert_eq!(scratch.key.get_raw("empty").unwrap(), Some((REG_BINARY, Vec::new())));
         scratch.key.flush().unwrap();
+    }
+
+    #[test]
+    fn every_value_shape_is_written_and_read_back_exactly() {
+        // The shapes load saves from EnableGpuFirmware and unload writes back with set_raw: texts without their
+        // NUL or of odd size, DWORDs of another size, unknown types. The trick in set_raw keeps them exact.
+        let mut scratch = Scratch::new("shapes");
+        for (index, (kind, data, _)) in every_type().into_iter().enumerate() {
+            let name = format!("value{index}");
+            scratch.key.set_raw(&name, kind, &data).unwrap();
+            assert_eq!(
+                scratch.key.get_raw(&name).unwrap(),
+                Some((kind, data.clone())),
+                "type {kind:#x}"
+            );
+            assert_eq!(
+                scratch.key.get(&name).unwrap(),
+                Some(decode(kind, &data)),
+                "type {kind:#x}"
+            );
+        }
+        // set() writes a DWORD as 4 bytes and a text with its NUL (win32.RegistryKey.set).
+        scratch.key.set("dword", &Decoded::Dword(0x11)).unwrap();
+        assert_eq!(
+            scratch.key.get_raw("dword").unwrap(),
+            Some((REG_DWORD, vec![0x11, 0, 0, 0]))
+        );
+        scratch
+            .key
+            .set("text", &Decoded::Sz("hex(1):31,00".to_string()))
+            .unwrap();
+        assert_eq!(
+            scratch.key.get_raw("text").unwrap(),
+            Some((REG_SZ, utf16("hex(1):31,00\0")))
+        );
     }
 
     #[test]

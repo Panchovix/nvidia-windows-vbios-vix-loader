@@ -85,8 +85,8 @@ GSP firmware mode on from an older version.
 Up to 0.4.x, some antivirus programs and online scanners flagged the two exes (for example generic or "ML"
 detections, or "Python DLL sideloading"): each exe was a Python program packed with Nuitka `--onefile`, which
 unpacked the Python runtime into a temporary folder when it started. From 0.5.0 the exes are native programs
-written in Rust: they are not packed, unpack nothing and load only Windows system DLLs. They are still not
-code-signed. The loader does not use the network. The exes are built by GitHub Actions from this repository
+written in Rust: they are not packed, unpack nothing and import only Windows system DLLs (Verify also loads the
+NVIDIA driver's `nvapi64.dll` from System32). They are still not code-signed. The loader does not use the network. The exes are built by GitHub Actions from this repository
 (see [Tests](#tests)).
 
 If an antivirus flags a file, compare it with `SHA256SUMS` to confirm that it matches the published asset, and
@@ -273,8 +273,9 @@ If Windows shows no image or the GPU fails in Device Manager:
 cargo test
 ```
 
-The tests use synthetic files and a fake registry; they run on Linux and Windows and never touch a GPU or
-the real registry. The workflow in `.github/workflows/build.yml` runs them on Linux (with `cargo fmt` and
+The tests use synthetic files and a fake registry; they run on Linux and Windows and never touch a GPU or a
+driver key. On Windows a few more tests check the registry calls on temporary keys under
+`HKEY_CURRENT_USER\Software`, which they delete, and list the display adapters. The workflow in `.github/workflows/build.yml` runs them on Linux (with `cargo fmt` and
 `clippy`) and on Windows, builds `vbios-loader.exe` and `vbios-loader-gui.exe` with Rust, checks the exes (no C
 runtime DLL, the manifest and version information, no AVX-512 instructions), checks that the window opens (with
 a screenshot), and publishes tagged versions as releases with `SHA256SUMS` and the third-party license texts.

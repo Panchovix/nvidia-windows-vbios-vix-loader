@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::*;
 use crate::devices::{REG_EXPAND_SZ, REG_MULTI_SZ, REG_NONE, REG_QWORD, REG_SZ};
 use crate::testing::{
-    adapter, binary as bin, chain, dword, platform, platform_with_version, raw, rom, sz, unrelated, FakeKey,
-    ImageOptions, OnDelete, OnWrite, A100, PREFIX, RTX_2060_SUPER, RTX_4090, RTX_5070, RTX_5070_TI, RTX_A2000,
+    adapter, binary as bin, chain, dword, every_type, platform, platform_with_version, raw, rom, sz, unrelated,
+    FakeKey, ImageOptions, OnDelete, OnWrite, A100, PREFIX, RTX_2060_SUPER, RTX_4090, RTX_5070, RTX_5070_TI, RTX_A2000,
     TRAILING,
 };
 
@@ -625,47 +625,6 @@ fn a_0x11_set_before_the_first_load_stays_with_a_note() {
 
 // RawFirmwareTests: EnableGpuFirmware values that are not a 4-byte REG_DWORD (set by another tool or by hand):
 // load saves the exact type and bytes in .reg notation and leaves the value, and unload writes them back.
-
-/// (type, data, backup text or None) of the Python test EVERY_TYPE.
-fn every_type() -> Vec<(u32, Vec<u8>, Option<&'static str>)> {
-    let mut big = Vec::new();
-    for _ in 0..16 {
-        big.extend(0..=255u8);
-    }
-    vec![
-        (REG_SZ, utf16("17\u{0}"), Some("hex(1):31,00,37,00,00,00")),
-        (REG_SZ, utf16("1\u{0}7\u{0}"), Some("hex(1):31,00,00,00,37,00,00,00")), // data after a NUL
-        (REG_SZ, b"".to_vec(), Some("hex(1):")),                                 // empty, no terminator
-        (REG_SZ, b"\0\0".to_vec(), Some("hex(1):00,00")),
-        (REG_SZ, b"1".to_vec(), Some("hex(1):31")),        // odd size
-        (REG_SZ, utf16("17"), Some("hex(1):31,00,37,00")), // no terminator
-        (REG_SZ, b"1\x007\x00\x00".to_vec(), Some("hex(1):31,00,37,00,00")), // odd size, no terminator
-        (REG_EXPAND_SZ, utf16("%a%"), Some("hex(2):25,00,61,00,25,00")),
-        (REG_EXPAND_SZ, utf16("%SystemRoot%\u{0}"), None),
-        (
-            REG_MULTI_SZ,
-            utf16("a\u{0}bc\u{0}\u{0}"),
-            Some("hex(7):61,00,00,00,62,00,63,00,00,00,00,00"),
-        ),
-        (REG_MULTI_SZ, utf16("a"), Some("hex(7):61,00")),
-        (
-            REG_QWORD,
-            0x11u64.to_le_bytes().to_vec(),
-            Some("hex(b):11,00,00,00,00,00,00,00"),
-        ),
-        (REG_BINARY, b"\x11".to_vec(), Some("hex(3):11")),
-        (REG_NONE, b"".to_vec(), Some("hex(0):")),
-        (REG_NONE, b"\x11\0\0\0".to_vec(), Some("hex(0):11,00,00,00")),
-        (REG_DWORD, b"\x11\0".to_vec(), Some("hex(4):11,00")),
-        (
-            REG_DWORD,
-            0x12u64.to_le_bytes().to_vec(),
-            Some("hex(4):12,00,00,00,00,00,00,00"),
-        ),
-        (0x12345, b"\xff".to_vec(), Some("hex(12345):ff")),
-        (REG_BINARY, big, None), // the largest saved
-    ]
-}
 
 /// BACKUP texts load refuses ("run unload first") and unload does not restore from.
 fn malformed_backups() -> Vec<String> {

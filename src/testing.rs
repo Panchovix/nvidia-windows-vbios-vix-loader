@@ -7,7 +7,9 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::devices::{decode, encode, Adapter, Decoded, REG_BINARY};
+use crate::devices::{
+    decode, encode, Adapter, Decoded, REG_BINARY, REG_DWORD, REG_EXPAND_SZ, REG_MULTI_SZ, REG_NONE, REG_QWORD, REG_SZ,
+};
 use crate::error::{Error, Result};
 use crate::platform::{Platform, RegistryKey};
 
@@ -675,6 +677,54 @@ impl Rng {
     pub fn text(&mut self, len: usize) -> String {
         (0..len).map(|_| self.char()).collect()
     }
+}
+
+/// UTF-16LE bytes of a text, as the registry stores REG_SZ data.
+pub fn utf16le(text: &str) -> Vec<u8> {
+    text.encode_utf16().flat_map(u16::to_le_bytes).collect()
+}
+
+/// (type, data, saved BACKUP text or None) of the Python test EVERY_TYPE: the shapes of EnableGpuFirmware that
+/// load saves exactly and unload writes back with set_raw (odd sizes, texts without their NUL, DWORDs of another
+/// size, unknown types).
+pub fn every_type() -> Vec<(u32, Vec<u8>, Option<&'static str>)> {
+    let mut big = Vec::new();
+    for _ in 0..16 {
+        big.extend(0..=255u8);
+    }
+    vec![
+        (REG_SZ, utf16le("17\u{0}"), Some("hex(1):31,00,37,00,00,00")),
+        (REG_SZ, utf16le("1\u{0}7\u{0}"), Some("hex(1):31,00,00,00,37,00,00,00")), // data after a NUL
+        (REG_SZ, b"".to_vec(), Some("hex(1):")),                                   // empty, no terminator
+        (REG_SZ, b"\0\0".to_vec(), Some("hex(1):00,00")),
+        (REG_SZ, b"1".to_vec(), Some("hex(1):31")),          // odd size
+        (REG_SZ, utf16le("17"), Some("hex(1):31,00,37,00")), // no terminator
+        (REG_SZ, b"1\x007\x00\x00".to_vec(), Some("hex(1):31,00,37,00,00")), // odd size, no terminator
+        (REG_EXPAND_SZ, utf16le("%a%"), Some("hex(2):25,00,61,00,25,00")),
+        (REG_EXPAND_SZ, utf16le("%SystemRoot%\u{0}"), None),
+        (
+            REG_MULTI_SZ,
+            utf16le("a\u{0}bc\u{0}\u{0}"),
+            Some("hex(7):61,00,00,00,62,00,63,00,00,00,00,00"),
+        ),
+        (REG_MULTI_SZ, utf16le("a"), Some("hex(7):61,00")),
+        (
+            REG_QWORD,
+            0x11u64.to_le_bytes().to_vec(),
+            Some("hex(b):11,00,00,00,00,00,00,00"),
+        ),
+        (REG_BINARY, b"\x11".to_vec(), Some("hex(3):11")),
+        (REG_NONE, b"".to_vec(), Some("hex(0):")),
+        (REG_NONE, b"\x11\0\0\0".to_vec(), Some("hex(0):11,00,00,00")),
+        (REG_DWORD, b"\x11\0".to_vec(), Some("hex(4):11,00")),
+        (
+            REG_DWORD,
+            0x12u64.to_le_bytes().to_vec(),
+            Some("hex(4):12,00,00,00,00,00,00,00"),
+        ),
+        (0x12345, b"\xff".to_vec(), Some("hex(12345):ff")),
+        (REG_BINARY, big, None), // the largest saved
+    ]
 }
 
 #[cfg(test)]

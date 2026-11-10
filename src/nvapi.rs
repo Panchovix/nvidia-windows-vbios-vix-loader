@@ -339,7 +339,7 @@ pub(crate) mod oserror {
                 code as i32,
                 text.trim_end_matches(|c| c <= ' ' || c == '.')
             ),
-            None => format!("Windows Error {code:#x}"),
+            None => format!("[WinError {}] Windows Error {code:#x}", code as i32),
         }
     }
 
@@ -881,7 +881,10 @@ mod tests {
             windows_err(193, Some("%1 is not a valid Win32 application.\r\n")),
             "[WinError 193] %1 is not a valid Win32 application"
         );
-        assert_eq!(windows_err(0xE000_0100, None), "Windows Error 0xe0000100");
+        assert_eq!(
+            windows_err(0xE000_0100, None),
+            "[WinError -536870656] Windows Error 0xe0000100"
+        );
         assert_eq!(
             module_not_found("C:\\WINDOWS\\system32\\nvapi64.dll"),
             "Could not find module 'C:\\WINDOWS\\system32\\nvapi64.dll' (or one of its dependencies). Try using the \

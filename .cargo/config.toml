@@ -1,6 +1,7 @@
 # Release settings for the Windows programs. They apply to x86_64-pc-windows-msvc only; the checks and tests on
 # other systems are not affected. The linker already defaults to ASLR (/DYNAMICBASE, /HIGHENTROPYVA) and DEP
-# (/NXCOMPAT) for 64-bit programs; CI checks those together with the flags below.
+# (/NXCOMPAT) for 64-bit programs. CI checks those, the static C runtime and Control Flow Guard in the exes; a
+# RUSTFLAGS variable would replace all of these flags at once, so those checks would fail too.
 [target.x86_64-pc-windows-msvc]
 rustflags = [
     # Link the Microsoft C runtime statically (libcmt, libvcruntime, libucrt): the exes need no VCRUNTIME140.dll

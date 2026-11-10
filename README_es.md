@@ -70,6 +70,12 @@ potencia. `unload` deja la clave como estaba antes del primer `load`, salvo que 
 herramienta (el `vbios` o los registros `romOverride` de mVolt+) no se restaura; en ese caso `load` lo avisa
 y `unload` deja `EnableGpuFirmware` como lo dejó esa herramienta.
 
+## Actualizar desde la 0.4.x
+
+La 0.5.0 es el mismo loader reescrito en Rust. Mantiene los valores de registro, los comandos, las opciones, la
+salida `--json`, los códigos de salida y la ventana de la 0.4.x, así que reconoce un reemplazo cargado con la
+0.4.x: `status`, `verify` y `unload` funcionan con él, y no hay que volver a cargar nada.
+
 ## Actualizar desde la 0.3.2 o anterior
 
 Las versiones hasta la 0.3.2 ponían `EnableGpuFirmware` en `0x11` en cada GPU con un reemplazo, lo que deja esas
@@ -79,15 +85,17 @@ las GPUs que siguen con el modo de firmware GSP activado por una versión anteri
 
 ## Avisos del antivirus
 
-Algunos antivirus y analizadores en línea marcan los dos exe (por ejemplo detecciones genéricas o "ML", o
-"Python DLL sideloading"). Son falsos positivos: cada exe es un programa en Python empaquetado con Nuitka
-`--onefile`, que al arrancar descomprime el runtime de Python en una carpeta temporal, y los exe no están
-firmados. El loader no usa la red. Los compila GitHub Actions desde este repositorio (ver [Pruebas](#pruebas));
-compara la descarga con `SHA256SUMS` para confirmar que coincide con el archivo publicado.
+Hasta la 0.4.x, algunos antivirus y analizadores en línea marcaban los dos exe (por ejemplo detecciones
+genéricas o "ML", o "Python DLL sideloading"): cada exe era un programa en Python empaquetado con Nuitka
+`--onefile`, que al arrancar descomprimía el runtime de Python en una carpeta temporal. Desde la 0.5.0 los exe
+son programas nativos escritos en Rust: no están empaquetados, no descomprimen nada y solo cargan DLLs del
+sistema de Windows. Siguen sin estar firmados. El loader no usa la red. Los compila GitHub Actions desde este
+repositorio (ver [Pruebas](#pruebas)).
 
-También envié los binarios a Microsoft para que dejen de marcarlos. Si aun así no quieres ejecutar los exe de
-los releases, clona el repositorio y usa el loader desde el código fuente (ver el final de [Uso](#uso)), o
-compila los exe tú mismo igual que el workflow (ver [Pruebas](#pruebas)).
+Si un antivirus marca un archivo, compáralo con `SHA256SUMS` para confirmar que coincide con el archivo
+publicado y reporta la detección como falso positivo a ese fabricante de antivirus. Si aun así no quieres
+ejecutar los exe de los releases, compílalos tú mismo desde el código fuente igual que el workflow (ver el final
+de [Uso](#uso)).
 
 Por último, si no quieres usar este loader para una VBIOS editada, puedes usar el reemplazo de BIOS de mVolt+
 (solo Blackwell, https://github.com/b00nz/mVolt). Los problemas de mVolt+ se reportan allá, no en este repositorio.
@@ -207,9 +215,11 @@ cada inicio de Windows. Una instalación limpia o una actualización del driver 
 del driver y perder el reemplazo. Después de actualizar, revisa `status` y vuelve a hacer `load` si hace
 falta.
 
-Desde el código fuente, con Python 3.11 o más nuevo: `pip install .` y luego `vbios-loader status` o
-`vbios-loader-gui`, o `python -m nvidia_vbios.windows_loader status` /
-`python -m nvidia_vbios.windows_loader.gui` con `src` en `PYTHONPATH`.
+Para compilar los exe desde el código fuente, instala Rust con el toolchain MSVC (`x86_64-pc-windows-msvc`) y
+las Visual Studio Build Tools con la carga de trabajo de C++, que incluyen el linker y el SDK de Windows, y luego
+ejecuta `cargo build --release` en el repositorio: los exe quedan en `target\release`. La compilación incluye
+la información de versión y el manifiesto de cada exe con el `rc.exe` del SDK de Windows; sin él, cargo muestra
+una advertencia y `vbios-loader-gui.exe` deja de pedir permisos de administrador.
 
 ## Verificar
 
@@ -272,14 +282,15 @@ Si Windows no da imagen o la GPU aparece con error en el Administrador de dispos
 ## Pruebas
 
 ```sh
-PYTHONPATH=src python -m unittest discover -s tests
+cargo test
 ```
 
 Las pruebas usan archivos sintéticos y un registro simulado; funcionan en Linux y en Windows y nunca tocan
-una GPU ni el registro real. El workflow `.github/workflows/build.yml` las ejecuta en Windows, compila
-`vbios-loader.exe` y `vbios-loader-gui.exe` con Nuitka, prueba que la ventana abra (con una captura de
-pantalla) y publica las versiones con tag como releases, junto con `SHA256SUMS` y los textos de licencia de
-terceros.
+una GPU ni el registro real. El workflow `.github/workflows/build.yml` las ejecuta en Linux (con `cargo fmt` y
+`clippy`) y en Windows, compila `vbios-loader.exe` y `vbios-loader-gui.exe` con Rust, revisa los exe (sin DLLs
+del runtime de C, el manifiesto y la información de versión, sin instrucciones AVX-512), prueba que la ventana
+abra (con una captura de pantalla) y publica las versiones con tag como releases, junto con `SHA256SUMS` y los
+textos de licencia de terceros.
 
 ## Licencia
 

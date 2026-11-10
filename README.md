@@ -67,6 +67,12 @@ returns the key to its state before the first `load`, except that an override wr
 (mVolt+ `vbios` or `romOverride` records) is not restored; in that case `load` says so, and `unload` leaves
 `EnableGpuFirmware` as that tool set it.
 
+## Upgrading from 0.4.x
+
+0.5.0 is the same loader rewritten in Rust. It keeps the registry values, commands, options, `--json` output,
+exit codes and window of 0.4.x, so an override loaded with 0.4.x is recognized: `status`, `verify` and `unload`
+work on it, and nothing has to be loaded again.
+
 ## Upgrading from 0.3.2 or older
 
 Versions up to 0.3.2 set `EnableGpuFirmware` to `0x11` on every GPU with an override, which keeps those GPUs in
@@ -76,15 +82,17 @@ GSP firmware mode on from an older version.
 
 ## Antivirus warnings
 
-Some antivirus programs and online scanners flag the two exes (for example generic or "ML" detections, or
-"Python DLL sideloading"). These are false positives: each exe is a Python program packed with Nuitka
-`--onefile`, which unpacks the Python runtime into a temporary folder when it starts, and the exes are not
+Up to 0.4.x, some antivirus programs and online scanners flagged the two exes (for example generic or "ML"
+detections, or "Python DLL sideloading"): each exe was a Python program packed with Nuitka `--onefile`, which
+unpacked the Python runtime into a temporary folder when it started. From 0.5.0 the exes are native programs
+written in Rust: they are not packed, unpack nothing and load only Windows system DLLs. They are still not
 code-signed. The loader does not use the network. The exes are built by GitHub Actions from this repository
-(see [Tests](#tests)); compare the download with `SHA256SUMS` to confirm that it matches the published asset.
+(see [Tests](#tests)).
 
-I've also submitted the binaries to Microsoft so they stop being flagged. If you still don't want to run the
-exes from the releases, clone the repository and run the loader from source (see the end of [Usage](#usage)),
-or build the exes yourself the same way the workflow does (see [Tests](#tests)).
+If an antivirus flags a file, compare it with `SHA256SUMS` to confirm that it matches the published asset, and
+report the detection to that antivirus vendor as a false positive. If you still don't want to run the exes from
+the releases, build them yourself from the source the same way the workflow does (see the end of
+[Usage](#usage)).
 
 And lastly, if you don't want to use this loader for an edited VBIOS, you can use the BIOS override of mVolt+
 (Blackwell only, https://github.com/b00nz/mVolt) instead. Issues related to mVolt+ go there, not to this repo.
@@ -196,9 +204,11 @@ The override stays in the GPU's registry key until you remove it, so it applies 
 start. A clean driver installation or a driver update can recreate the driver key and drop the override. Run
 `status` after updating and `load` again if needed.
 
-From source, with Python 3.11 or newer: `pip install .` then `vbios-loader status` or `vbios-loader-gui`, or
-`python -m nvidia_vbios.windows_loader status` / `python -m nvidia_vbios.windows_loader.gui` with `src` on
-`PYTHONPATH`.
+To build the exes from source, install Rust with the MSVC toolchain (`x86_64-pc-windows-msvc`) and the Visual
+Studio Build Tools with the C++ workload, which include the linker and the Windows SDK, then run
+`cargo build --release` in the repository: the exes are in `target\release`. The build embeds the version
+information and the manifest of each exe with the Windows SDK's `rc.exe`; without it cargo prints a warning,
+and `vbios-loader-gui.exe` then does not ask for administrator rights.
 
 ## Verify
 
@@ -260,13 +270,14 @@ If Windows shows no image or the GPU fails in Device Manager:
 ## Tests
 
 ```sh
-PYTHONPATH=src python -m unittest discover -s tests
+cargo test
 ```
 
 The tests use synthetic files and a fake registry; they run on Linux and Windows and never touch a GPU or
-the real registry. The workflow in `.github/workflows/build.yml` runs them on Windows, builds
-`vbios-loader.exe` and `vbios-loader-gui.exe` with Nuitka, checks that the window opens (with a
-screenshot), and publishes tagged versions as releases with `SHA256SUMS` and the third-party license texts.
+the real registry. The workflow in `.github/workflows/build.yml` runs them on Linux (with `cargo fmt` and
+`clippy`) and on Windows, builds `vbios-loader.exe` and `vbios-loader-gui.exe` with Rust, checks the exes (no C
+runtime DLL, the manifest and version information, no AVX-512 instructions), checks that the window opens (with
+a screenshot), and publishes tagged versions as releases with `SHA256SUMS` and the third-party license texts.
 
 ## License
 

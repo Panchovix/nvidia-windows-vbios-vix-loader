@@ -1,4 +1,4 @@
-# Tests, then single-file vbios-loader.exe (command line) and vbios-loader-gui.exe (window).
+# Tests, then the native vbios-loader.exe (command line) and vbios-loader-gui.exe (window), built with Rust.
 # A tag vX.Y.Z publishes a release.
 name: build
 on:
@@ -8,6 +8,31 @@ on:
   pull_request:
   workflow_dispatch:
 jobs:
+  linux:
+    # Formatting, lints (also for the Windows target, type checks only) and the tests that run on any system.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      RUSTUP_TOOLCHAIN: '1.99.1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy \
+            --target x86_64-pc-windows-msvc --no-self-update
+          rustc --version
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Clippy (Windows target)
+        run: cargo clippy --locked --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+      - name: Unit tests
+        run: cargo test --locked
   windows:
     runs-on: windows-latest
     timeout-minutes: 60
@@ -17,50 +42,89 @@ jobs:
       run:
         shell: pwsh
     env:
-      PYTHONPATH: src
-      PYTHONDONTWRITEBYTECODE: '1'
+      RUSTUP_TOOLCHAIN: '1.99.1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
-        with:
-          python-version: '3.12.10'
-      - name: Tag matches the version
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: if ("${{ github.ref_name }}" -ne "v0.4.1") { throw "tag ${{ github.ref_name }} is not v0.4.1" }
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --target x86_64-pc-windows-msvc --no-self-update
+          if ($LASTEXITCODE -ne 0) { throw "rustup exited with code $LASTEXITCODE" }
+          rustc --version --verbose
+      - name: Version (and the tag matches it)
+        run: |
+          $version = (cargo metadata --no-deps --locked --format-version 1 | ConvertFrom-Json).packages[0].version
+          if (-not $version) { throw 'cargo metadata did not give the version' }
+          "CRATE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if ($env:GITHUB_REF -like 'refs/tags/v*' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw "tag $env:GITHUB_REF_NAME is not v$version (Cargo.toml)"
+          }
       - name: Unit tests
-        run: python -m unittest discover -s tests -v
-      - name: Install Nuitka
-        run: python -m pip install nuitka==4.2.2 ordered-set==4.1.0 zstandard==0.23.0
-      - name: Build vbios-loader.exe
-        run: >-
-          python -m nuitka --onefile --assume-yes-for-downloads --msvc=latest
-          --windows-console-mode=force --python-flag=no_site --python-flag=isolated
-          --nofollow-import-to=unittest --nofollow-import-to=pydoc --nofollow-import-to=tests
-          --include-package=nvidia_vbios.windows_loader
-          --nofollow-import-to=nvidia_vbios.windows_loader.gui --nofollow-import-to=tkinter
-          --product-name="Windows VBIOS Vix Loader" --company-name="Vix Loader authors"
-          --file-description="Windows VBIOS Vix Loader" --copyright="Copyright (c) 2026 panchovix"
-          --file-version=0.4.1 --product-version=0.4.1
-          --output-dir=build --output-filename=vbios-loader.exe tools/entry.py
-      - name: Build vbios-loader-gui.exe
-        run: >-
-          python -m nuitka --onefile --assume-yes-for-downloads --msvc=latest
-          --windows-console-mode=disable --windows-uac-admin --enable-plugin=tk-inter
-          --python-flag=no_site --python-flag=isolated
-          --nofollow-import-to=unittest --nofollow-import-to=pydoc --nofollow-import-to=tests
-          --include-package=nvidia_vbios.windows_loader
-          --product-name="Windows VBIOS Vix Loader" --company-name="Vix Loader authors"
-          --file-description="Windows VBIOS Vix Loader (window)" --copyright="Copyright (c) 2026 panchovix"
-          --file-version=0.4.1 --product-version=0.4.1
-          --output-dir=build --output-filename=vbios-loader-gui.exe tools/entry_gui.py
+        run: cargo test --locked
+      - name: Build vbios-loader.exe and vbios-loader-gui.exe
+        env:
+          # A missing rc.exe fails the build instead of leaving the exes without manifest and version information.
+          VBIOS_LOADER_REQUIRE_RESOURCES: '1'
+        run: cargo build --release --locked
+      - name: Check the exes
+        # No C runtime DLL imports (static CRT), ASLR, DEP and Control Flow Guard, one manifest with the expected
+        # execution level, the version information, and no AVX-512 instructions (they would crash older CPUs).
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $dumpbin = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+              -find 'VC\Tools\MSVC\**\bin\Hostx64\x64\dumpbin.exe' | Select-Object -Last 1
+          if (-not $dumpbin) { throw 'dumpbin.exe was not found' }
+          $kit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\10.*" -Directory |
+              Where-Object { Test-Path "$($_.FullName)\x64\mt.exe" } | Sort-Object { [version]$_.Name } |
+              Select-Object -Last 1
+          if (-not $kit) { throw 'mt.exe was not found' }
+          $mt = Join-Path $kit.FullName 'x64\mt.exe'
+          $programs = [ordered]@{
+            'vbios-loader' = @('asInvoker', 'Windows VBIOS Vix Loader')
+            'vbios-loader-gui' = @('requireAdministrator', 'Windows VBIOS Vix Loader (window)')
+          }
+          foreach ($name in $programs.Keys) {
+            $level, $description = $programs[$name]
+            $exe = (Resolve-Path "target/release/$name.exe").Path
+            $dlls = & $dumpbin /nologo /dependents $exe | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } |
+                ForEach-Object { $_.Trim() }
+            if ($LASTEXITCODE -ne 0 -or -not $dlls) { throw "dumpbin /dependents failed on $name.exe" }
+            "$name.exe imports: $($dlls -join ', ')"
+            $runtime = $dlls | Where-Object { $_ -match '^(vcruntime|msvcp|msvcr|ucrtbase|api-ms-win-crt-)' }
+            if ($runtime) { throw "$name.exe imports C runtime DLLs: $($runtime -join ', ')" }
+            $headers = (& $dumpbin /nologo /headers $exe) -join "`n"
+            foreach ($flag in 'High Entropy Virtual Addresses', 'Dynamic base', 'NX compatible', '(Control Flow )?Guard') {
+              if ($headers -notmatch "(?m)^\s+$flag\s*$") { throw "$name.exe: DLL characteristic '$flag' is not set" }
+            }
+            $manifest = Join-Path $env:RUNNER_TEMP "$name.manifest"
+            & $mt -nologo "-inputresource:$exe;#1" "-out:$manifest"
+            if ($LASTEXITCODE -ne 0) { throw "$name.exe has no manifest resource" }
+            $found = [regex]::Match((Get-Content -Raw $manifest), 'requestedExecutionLevel\s+level="([^"]*)"').Groups[1].Value
+            if ($found -ne $level) { throw "$name.exe: requestedExecutionLevel is '$found', expected '$level'" }
+            $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
+            $count = [regex]::Matches($text, '<assembly\s').Count
+            if ($count -ne 1) { throw "$name.exe contains $count manifests" }
+            $info = (Get-Item $exe).VersionInfo
+            $fields = [ordered]@{
+              CompanyName = 'Vix Loader authors'; ProductName = 'Windows VBIOS Vix Loader'
+              FileDescription = $description; LegalCopyright = 'Copyright (c) 2026 panchovix'
+              OriginalFilename = "$name.exe"; InternalName = $name
+              FileVersion = $env:CRATE_VERSION; ProductVersion = $env:CRATE_VERSION
+            }
+            foreach ($field in $fields.Keys) {
+              if ($info.$field -ne $fields[$field]) { throw "$name.exe: $field is '$($info.$field)', expected '$($fields[$field])'" }
+            }
+            $zmm = & $dumpbin /nologo /disasm:nobytes $exe | Select-String -Pattern '\bzmm\d' | Select-Object -First 5
+            if ($zmm) { $zmm; throw "$name.exe contains AVX-512 (zmm) instructions" }
+            "$name.exe: OK ($level, $($info.FileDescription) $($info.FileVersion))"
+          }
       - name: Smoke test (no NVIDIA GPU on the runner)
         run: |
-          $out = (& build/vbios-loader.exe status --json | Out-String).Trim()
+          $out = (& target/release/vbios-loader.exe status --json | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) { throw "status exited with code $LASTEXITCODE" }
           if ($out -ne '[]') { throw "unexpected status output: $out" }
-          & build/vbios-loader.exe --version
+          & target/release/vbios-loader.exe --version
           if ($LASTEXITCODE -ne 0) { throw "--version exited with code $LASTEXITCODE" }
       - name: Window smoke test (screenshot)
         # The runner's shell is already elevated. The redirection makes Start-Process use CreateProcess, so the
@@ -68,7 +132,7 @@ jobs:
         # In smoke mode the window reads the status, writes nothing and exits 0.
         run: |
           $env:VBIOS_LOADER_GUI_SMOKE = '1'
-          $p = Start-Process -FilePath (Resolve-Path build/vbios-loader-gui.exe).Path -PassThru `
+          $p = Start-Process -FilePath (Resolve-Path target/release/vbios-loader-gui.exe).Path -PassThru `
               -RedirectStandardOutput gui-out.txt -RedirectStandardError gui-err.txt
           $null = $p.Handle
           Start-Sleep -Seconds 10
@@ -90,10 +154,10 @@ jobs:
           if-no-files-found: ignore
       - name: Package
         run: |
-          New-Item -ItemType Directory dist | Out-Null
-          Copy-Item build/vbios-loader.exe, build/vbios-loader-gui.exe dist/
-          python tools/notices.py notices
-          if ($LASTEXITCODE -ne 0) { throw "license notices failed" }
+          New-Item -ItemType Directory dist, notices | Out-Null
+          Copy-Item target/release/vbios-loader.exe, target/release/vbios-loader-gui.exe dist/
+          Copy-Item LICENSE, THIRD_PARTY_NOTICES.md notices/
+          Copy-Item third_party notices/third_party -Recurse
           Compress-Archive -Path notices/* -DestinationPath dist/third-party-notices.zip
           $sums = Get-ChildItem dist -File | Sort-Object Name | ForEach-Object {
             "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
@@ -105,7 +169,7 @@ jobs:
           path: dist/*
           if-no-files-found: error
   release:
-    needs: windows
+    needs: [linux, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

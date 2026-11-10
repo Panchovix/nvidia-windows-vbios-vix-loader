@@ -1,0 +1,36 @@
+// Version information and application manifest of one program. build.rs fills in the @NAME@ fields for each
+// program and compiles a copy with rc.exe. Numeric constants instead of winver.h/winuser.h, so no include path
+// is needed: 24 = RT_MANIFEST, 0x40004 = VOS_NT_WINDOWS32, 1 = VFT_APP.
+#pragma code_page(65001)
+
+1 24 "@PROGRAM@.manifest"
+
+1 VERSIONINFO
+FILEVERSION @VERSION_NUMBERS@
+PRODUCTVERSION @VERSION_NUMBERS@
+FILEFLAGSMASK 0x3F
+FILEFLAGS 0x0
+FILEOS 0x40004
+FILETYPE 0x1
+FILESUBTYPE 0x0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // U.S. English, Unicode
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Vix Loader authors"
+            VALUE "FileDescription", "@FILE_DESCRIPTION@"
+            VALUE "FileVersion", "@VERSION@"
+            VALUE "InternalName", "@PROGRAM@"
+            VALUE "LegalCopyright", "Copyright (c) 2026 panchovix"
+            VALUE "OriginalFilename", "@PROGRAM@.exe"
+            VALUE "ProductName", "Windows VBIOS Vix Loader"
+            VALUE "ProductVersion", "@VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

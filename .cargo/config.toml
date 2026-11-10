@@ -1,0 +1,19 @@
+# Release settings for the Windows programs. They apply to x86_64-pc-windows-msvc only; the checks and tests on
+# other systems are not affected. The linker already defaults to ASLR (/DYNAMICBASE, /HIGHENTROPYVA) and DEP
+# (/NXCOMPAT) for 64-bit programs; CI checks those together with the flags below.
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    # Link the Microsoft C runtime statically (libcmt, libvcruntime, libucrt): the exes need no VCRUNTIME140.dll
+    # or Visual C++ Redistributable, and import Windows system DLLs only.
+    "-C", "target-feature=+crt-static",
+    # Control Flow Guard: indirect calls are checked against the program's valid call targets (rustc also passes
+    # /guard:cf to the linker). The standard library is precompiled without it, so it covers this crate's code.
+    "-C", "control-flow-guard=checks",
+    # Imported DLLs are resolved from System32 only (LOAD_LIBRARY_SEARCH_SYSTEM32), never from the exe's folder,
+    # so a DLL planted next to a downloaded exe is not loaded. DLLs loaded at run time (nvapi64.dll) pass their
+    # own search flags.
+    "-C", "link-arg=/DEPENDENTLOADFLAG:0x800",
+    # Compatible with hardware-enforced stack protection (CET shadow stacks): Windows then checks return addresses
+    # on CPUs that support it. Rust's unwinding on Windows uses the system unwinder, which supports it.
+    "-C", "link-arg=/CETCOMPAT",
+]

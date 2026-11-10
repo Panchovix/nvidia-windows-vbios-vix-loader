@@ -1,6 +1,4 @@
-__pycache__/
-*.pyc
+/target/
+/dist/
+/notices/
 .private/
-build/
-dist/
-*.egg-info/

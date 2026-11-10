@@ -1,0 +1,58 @@
+[package]
+name = "nvidia-windows-vbios-vix-loader"
+version = "0.5.0"
+edition = "2021"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Load a modified VBIOS on Windows through the NVIDIA driver's registry override, without flashing"
+repository = "https://github.com/Panchovix/nvidia-windows-vbios-vix-loader"
+publish = false
+build = "build.rs"
+
+[lib]
+name = "vbios_loader"
+path = "src/lib.rs"
+
+[features]
+# FakePlatform and FakeKey (src/testing.rs) for tests outside this crate, such as the comparison with the Python loader.
+testing = []
+
+[[bin]]
+name = "vbios-loader"
+path = "src/bin/vbios-loader.rs"
+
+[[bin]]
+name = "vbios-loader-gui"
+path = "src/bin/vbios-loader-gui.rs"
+
+# The only runtime dependency, and only on Windows: Microsoft's generated Win32 bindings (MIT OR Apache-2.0).
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "=0.61.2"
+features = [
+    "Win32_Foundation",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Controls",
+    "Win32_UI_Controls_Dialogs",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+strip = true
+panic = "unwind"
